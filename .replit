@@ -68,6 +68,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start App"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start Frontend"
+
 [[workflows.workflow]]
 name = "Start App"
 author = "agent"
@@ -96,8 +100,10 @@ name = "Start Frontend"
 author = "agent"
 mode = "sequential"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run expo:dev"
+args = "bash -c 'for i in 1 2 3 4 5; do fuser -k 8081/tcp 2>/dev/null; sleep 2; if ! fuser 8081/tcp 2>/dev/null; then break; fi; done; npm run expo:dev'"
 waitForPort = 8081
-ensurePreviewReachable = "/status"
