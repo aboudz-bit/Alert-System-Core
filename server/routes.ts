@@ -155,7 +155,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/zones/:id", requireRole("admin", "supervisor"), async (req: Request, res: Response) => {
     try {
-      const zone = await storage.updateZone(req.params.id, req.body);
+      const parsed = insertZoneSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid zone data" });
+      }
+      const zone = await storage.updateZone(req.params.id, parsed.data);
       if (!zone) {
         return res.status(404).json({ message: "Zone not found" });
       }
@@ -218,7 +222,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/locations/:id", requireRole("admin", "supervisor"), async (req: Request, res: Response) => {
     try {
-      const location = await storage.updateLocation(req.params.id, req.body);
+      const parsed = insertLocationSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid location data" });
+      }
+      const location = await storage.updateLocation(req.params.id, parsed.data);
       if (!location) {
         return res.status(404).json({ message: "Location not found" });
       }
@@ -284,7 +292,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/alerts/:id", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
     try {
-      const alert = await storage.updateAlert(req.params.id, req.body);
+      const parsed = insertAlertSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid alert data" });
+      }
+      const alert = await storage.updateAlert(req.params.id, parsed.data);
       if (!alert) {
         return res.status(404).json({ message: "Alert not found" });
       }
