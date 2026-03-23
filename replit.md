@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-6)
+# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-7)
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-6: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, and wind/hazard overlays. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-7: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, wind/hazard overlays, and People monitoring tab. Stability is the top priority.
 
 ## Stack
 
@@ -57,7 +57,7 @@ shared/
 
 ## Database Schema
 
-- **users**: id, username, password, name, role (admin/eco/supervisor/user)
+- **users**: id, username, password, name, role (admin/eco/supervisor/user), zoneId (FK zones, nullable), locationId (FK locations, nullable)
 - **zones**: id, name, description, polygon (jsonb), color
 - **locations**: id, name, latitude, longitude, zoneId (FK zones)
 - **alerts**: id, title, description, severity, status, zoneId (FK zones), createdBy (FK users)
@@ -69,9 +69,9 @@ shared/
 
 | Role       | Tabs                                   | Can Create Alerts | Can Activate Emergency |
 |------------|----------------------------------------|-------------------|----------------------|
-| Admin      | Map, Zones, Locations, Alerts, Settings | Yes              | Yes                  |
-| Supervisor | Map, Zones, Alerts, Settings           | Yes               | Yes                  |
-| ECO        | Map, Alerts, Settings                  | Yes               | Yes                  |
+| Admin      | Map, Zones, Locations, Alerts, People, Settings | Yes              | Yes                  |
+| Supervisor | Map, Zones, Alerts, People, Settings   | Yes               | Yes                  |
+| ECO        | Map, Alerts, People, Settings          | Yes               | Yes                  |
 | User       | Map, Alerts, Settings                  | No (read-only)    | No (view only)       |
 
 ## API Routes
@@ -95,6 +95,7 @@ shared/
 - `GET /api/emergency/:id/receipts/summary` - Get receipt summary with confirmed/not confirmed users (admin/eco/supervisor)
 - `GET /api/wind` - Get current wind conditions (all authenticated)
 - `POST /api/wind` - Update wind direction/speed (admin/eco/supervisor)
+- `GET /api/people` - Get all users grouped with zone/location/receipt data (admin/eco/supervisor)
 
 ## Seed Users
 

@@ -19,17 +19,18 @@ const ALL_TABS: TabConfig[] = [
   { name: "zones", title: "Zones", icon: "layers" },
   { name: "locations", title: "Locations", icon: "map-pin" },
   { name: "alerts", title: "Alerts", icon: "alert-triangle" },
+  { name: "people", title: "People", icon: "users" },
   { name: "settings", title: "Settings", icon: "settings" },
 ];
 
 function getVisibleTabs(role: UserRole): string[] {
   switch (role) {
     case "admin":
-      return ["index", "zones", "locations", "alerts", "settings"];
+      return ["index", "zones", "locations", "alerts", "people", "settings"];
     case "supervisor":
-      return ["index", "zones", "alerts", "settings"];
+      return ["index", "zones", "alerts", "people", "settings"];
     case "eco":
-      return ["index", "alerts", "settings"];
+      return ["index", "alerts", "people", "settings"];
     case "user":
     default:
       return ["index", "alerts", "settings"];

@@ -483,6 +483,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/people", requireRole("admin", "eco", "supervisor"), async (_req: Request, res: Response) => {
+    try {
+      const allUsers = await storage.getUsers();
+      const allZones = await storage.getZones();
+      const allLocations = await storage.getLocations();
+      const activeEmergency = await storage.getActiveEmergencyMode();
+
+      let receiptMap: Record<string, string> = {};
+      if (activeEmergency) {
+        const receipts = await storage.getReceiptsByMode(activeEmergency.id);
+        for (const r of receipts) {
+          receiptMap[r.userId] = r.confirmedAt ? new Date(r.confirmedAt).toISOString() : "";
+        }
+      }
+
+      const people = allUsers.map((u) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+        role: u.role,
+        zoneId: u.zoneId || null,
+        locationId: u.locationId || null,
+        receiptStatus: activeEmergency ? (receiptMap[u.id] ? "confirmed" : "not_confirmed") : null,
+        confirmedAt: receiptMap[u.id] || null,
+      }));
+
+      return res.json({
+        people,
+        zones: allZones.map((z) => ({ id: z.id, name: z.name })),
+        locations: allLocations.map((l) => ({ id: l.id, name: l.name, zoneId: l.zoneId })),
+        hasActiveEmergency: !!activeEmergency,
+      });
+    } catch (error) {
+      console.error("Get people error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

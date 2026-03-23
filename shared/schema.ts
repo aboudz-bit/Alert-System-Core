@@ -17,6 +17,8 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: roleEnum("role").notNull().default("user"),
+  zoneId: varchar("zone_id").references(() => zones.id),
+  locationId: varchar("location_id").references(() => locations.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
