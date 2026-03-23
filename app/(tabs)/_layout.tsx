@@ -1,29 +1,46 @@
-// template
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
-import { BlurView } from "expo-blur";
-import { SymbolView } from "expo-symbols";
 import { Platform, StyleSheet, useColorScheme } from "react-native";
+import { BlurView } from "expo-blur";
+import { Feather } from "@expo/vector-icons";
 import React from "react";
-
 import Colors from "@/constants/colors";
+import { useAuth } from "@/lib/auth-context";
+import type { UserRole } from "@shared/schema";
 
-//IMPORTANT: iOS 26 Exists, feel free to use NativeTabs for native tabs with liquid glass support.
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
+type TabConfig = {
+  name: string;
+  title: string;
+  icon: keyof typeof Feather.glyphMap;
+};
+
+const ALL_TABS: TabConfig[] = [
+  { name: "index", title: "Map", icon: "map" },
+  { name: "zones", title: "Zones", icon: "layers" },
+  { name: "locations", title: "Locations", icon: "map-pin" },
+  { name: "alerts", title: "Alerts", icon: "alert-triangle" },
+  { name: "settings", title: "Settings", icon: "settings" },
+];
+
+function getVisibleTabs(role: UserRole): string[] {
+  switch (role) {
+    case "admin":
+      return ["index", "zones", "locations", "alerts", "settings"];
+    case "supervisor":
+      return ["index", "zones", "alerts", "settings"];
+    case "eco":
+      return ["index", "alerts", "settings"];
+    case "user":
+    default:
+      return ["index", "alerts", "settings"];
+  }
 }
 
-function ClassicTabLayout() {
+export default function TabLayout() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const { user } = useAuth();
+  const role: UserRole = user?.role || "user";
+  const visibleTabs = getVisibleTabs(role);
 
   return (
     <Tabs
@@ -32,13 +49,15 @@ function ClassicTabLayout() {
         tabBarInactiveTintColor: Colors.light.tabIconDefault,
         headerShown: true,
         tabBarStyle: {
-          position: "absolute",
+          position: "absolute" as const,
           backgroundColor: Platform.select({
             ios: "transparent",
             android: isDark ? "#000" : "#fff",
+            default: "#fff",
           }),
           borderTopWidth: 0,
           elevation: 0,
+          height: Platform.OS === "web" ? 84 : undefined,
         },
         tabBarBackground: () =>
           Platform.OS === "ios" ? (
@@ -50,22 +69,19 @@ function ClassicTabLayout() {
           ) : null,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color }) => (
-            <SymbolView name="house" tintColor={color} size={24} />
-          ),
-        }}
-      />
+      {ALL_TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            href: visibleTabs.includes(tab.name) ? undefined : null,
+            tabBarIcon: ({ color }) => (
+              <Feather name={tab.icon} size={22} color={color} />
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }
