@@ -2,14 +2,19 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import type { Zone } from "@shared/schema";
+import type { Zone, Location, Alert } from "@shared/schema";
 
 interface NativeMapProps {
   zones: Zone[];
+  locations?: Location[];
+  activeAlerts?: Alert[];
+  alertZoneIds?: Set<string>;
 }
 
-export default function NativeMap({ zones }: NativeMapProps) {
+export default function NativeMap({ zones, locations, activeAlerts }: NativeMapProps) {
   const safeZones = Array.isArray(zones) ? zones : [];
+  const safeLocations = Array.isArray(locations) ? locations : [];
+  const safeAlerts = Array.isArray(activeAlerts) ? activeAlerts : [];
 
   return (
     <View style={styles.container}>
@@ -20,6 +25,16 @@ export default function NativeMap({ zones }: NativeMapProps) {
           ? `${safeZones.length} zone${safeZones.length !== 1 ? "s" : ""} configured`
           : "No zones configured yet"}
       </Text>
+      {safeLocations.length > 0 ? (
+        <Text style={styles.text}>
+          {safeLocations.length} location{safeLocations.length !== 1 ? "s" : ""} on map
+        </Text>
+      ) : null}
+      {safeAlerts.length > 0 ? (
+        <Text style={[styles.text, { color: Colors.light.danger }]}>
+          {safeAlerts.length} active alert{safeAlerts.length !== 1 ? "s" : ""}
+        </Text>
+      ) : null}
       <Text style={styles.hint}>
         Map rendering is available on mobile devices
       </Text>

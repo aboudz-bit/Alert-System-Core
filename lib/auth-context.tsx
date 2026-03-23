@@ -88,7 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setUser(null);
       queryClient.clear();
-      useAppStore.getState().setEmergencyMode(null);
+      const store = useAppStore.getState();
+      store.setZones([]);
+      store.setLocations([]);
+      store.setAlerts([]);
+      store.setEmergencyMode(null);
     }
   }, []);
 

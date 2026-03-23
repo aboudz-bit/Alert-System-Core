@@ -25,7 +25,7 @@ app/                      # Expo Router screens
   create-alert.tsx        # Modal: create alert
   (tabs)/
     _layout.tsx           # Role-based tab navigation
-    index.tsx             # Map screen (safe rendering)
+    index.tsx             # Map screen with alert monitor (zones, locations, alerts, emergency overlay)
     zones.tsx             # Zones list
     locations.tsx         # Locations list
     alerts.tsx            # Alerts list with clear action + EmergencyPanel
@@ -34,8 +34,8 @@ components/
   ErrorBoundary.tsx       # Class-based error boundary
   ErrorFallback.tsx       # Error UI with restart
   EmergencyPanel.tsx      # Shelter In / Blackout activate + clear UI
-  NativeMap.tsx           # Native map with polygon rendering
-  NativeMap.web.tsx       # Web fallback (no react-native-maps)
+  NativeMap.tsx           # Native map with polygons, location markers, alert zone highlighting
+  NativeMap.web.tsx       # Web fallback with zone/location/alert counts
 constants/
   colors.ts              # Color constants
 lib/

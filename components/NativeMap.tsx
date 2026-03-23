@@ -1,9 +1,12 @@
 import React from "react";
-import MapView, { Polygon } from "react-native-maps";
-import type { Zone } from "@shared/schema";
+import MapView, { Polygon, Marker } from "react-native-maps";
+import type { Zone, Location, Alert } from "@shared/schema";
 
 interface NativeMapProps {
   zones: Zone[];
+  locations?: Location[];
+  activeAlerts?: Alert[];
+  alertZoneIds?: Set<string>;
 }
 
 function isValidPolygon(polygon: unknown): polygon is Array<{ latitude: number; longitude: number }> {
@@ -26,8 +29,25 @@ function isValidPolygon(polygon: unknown): polygon is Array<{ latitude: number; 
   );
 }
 
-export default function NativeMap({ zones }: NativeMapProps) {
+function isValidCoord(lat: unknown, lng: unknown): boolean {
+  return (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
+export default function NativeMap({ zones, locations, activeAlerts, alertZoneIds }: NativeMapProps) {
   const safeZones = (zones || []).filter((z) => z && isValidPolygon(z.polygon));
+  const safeLocations = (locations || []).filter(
+    (l) => l && isValidCoord(l.latitude, l.longitude)
+  );
+  const safeAlertZoneIds = alertZoneIds || new Set<string>();
 
   return (
     <MapView
@@ -42,16 +62,28 @@ export default function NativeMap({ zones }: NativeMapProps) {
     >
       {safeZones.map((zone) => {
         const poly = zone.polygon as Array<{ latitude: number; longitude: number }>;
+        const hasAlert = safeAlertZoneIds.has(zone.id);
         return (
           <Polygon
             key={zone.id}
             coordinates={poly}
-            fillColor={`${zone.color || "#FF0000"}33`}
-            strokeColor={zone.color || "#FF0000"}
-            strokeWidth={2}
+            fillColor={hasAlert ? "#FF3B3044" : `${zone.color || "#FF0000"}33`}
+            strokeColor={hasAlert ? "#FF3B30" : (zone.color || "#FF0000")}
+            strokeWidth={hasAlert ? 3 : 2}
           />
         );
       })}
+      {safeLocations.map((loc) => (
+        <Marker
+          key={loc.id}
+          coordinate={{
+            latitude: Number(loc.latitude),
+            longitude: Number(loc.longitude),
+          }}
+          title={loc.name}
+          pinColor="#007AFF"
+        />
+      ))}
     </MapView>
   );
 }
