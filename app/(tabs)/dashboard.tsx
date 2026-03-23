@@ -13,19 +13,8 @@ import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { getQueryFn } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
-import type { Zone, Alert as AlertType, EmergencyMode } from "@shared/schema";
-
-interface PersonEntry {
-  id: string;
-  name: string;
-  role: string;
-  receiptStatus: "confirmed" | "not_confirmed" | null;
-}
-
-interface PeopleResponse {
-  people: PersonEntry[];
-  hasActiveEmergency: boolean;
-}
+import { useEmergency } from "@/lib/emergency-context";
+import type { Zone, Alert as AlertType } from "@shared/schema";
 
 function StatCard({
   icon,
@@ -55,6 +44,7 @@ function StatCard({
 export default function DashboardScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const { emergencyMode, isActive: hasEmergency, receiptSummary } = useEmergency();
   const isPrivileged =
     user?.role === "admin" || user?.role === "eco" || user?.role === "supervisor";
 
@@ -68,35 +58,21 @@ export default function DashboardScreen() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  const { data: emergency } = useQuery<EmergencyMode | null>({
-    queryKey: ["/api/emergency/active"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    refetchInterval: 15000,
-  });
-
-  const { data: peopleData } = useQuery<PeopleResponse>({
-    queryKey: ["/api/people"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    enabled: isPrivileged,
-    refetchInterval: 15000,
-  });
-
   const safeZones = Array.isArray(zones) ? zones : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
   const activeAlerts = useMemo(
     () => safeAlerts.filter((a) => a.status === "active"),
     [safeAlerts]
   );
-  const hasEmergency = emergency && emergency.status === "active";
 
-  const peopleStats = useMemo(() => {
-    if (!peopleData?.people) return { total: 0, confirmed: 0, notConfirmed: 0, pending: 0 };
-    const total = peopleData.people.length;
-    const confirmed = peopleData.people.filter((p) => p.receiptStatus === "confirmed").length;
-    const notConfirmed = peopleData.people.filter((p) => p.receiptStatus === "not_confirmed").length;
+  const receiptStats = useMemo(() => {
+    if (!receiptSummary) return { total: 0, confirmed: 0, notConfirmed: 0, pending: 0 };
+    const confirmed = (receiptSummary.confirmed || []).length;
+    const notConfirmed = (receiptSummary.notConfirmed || []).length;
+    const total = receiptSummary.total || 0;
     const pending = total - confirmed;
     return { total, confirmed, notConfirmed, pending };
-  }, [peopleData?.people]);
+  }, [receiptSummary]);
 
   return (
     <ScrollView
@@ -106,24 +82,24 @@ export default function DashboardScreen() {
         paddingTop: 16,
       }}
     >
-      {hasEmergency ? (
+      {hasEmergency && emergencyMode ? (
         <View
           style={[
             styles.emergencyCard,
             {
               backgroundColor:
-                emergency.type === "blackout" ? "#1C1C1E" : Colors.light.warning,
+                emergencyMode.type === "blackout" ? "#1C1C1E" : Colors.light.warning,
             },
           ]}
         >
           <Feather
-            name={emergency.type === "blackout" ? "moon" : "home"}
+            name={emergencyMode.type === "blackout" ? "moon" : "home"}
             size={20}
             color="#fff"
           />
           <View style={styles.emergencyTextWrap}>
             <Text style={styles.emergencyTitle}>
-              {emergency.type === "shelter_in" ? "SHELTER IN PLACE" : "BLACKOUT"} ACTIVE
+              {emergencyMode.type === "shelter_in" ? "SHELTER IN PLACE" : "BLACKOUT"} ACTIVE
             </Text>
             <Text style={styles.emergencySubtext}>
               All personnel should follow emergency procedures
@@ -146,39 +122,39 @@ export default function DashboardScreen() {
           <View style={styles.receiptBar}>
             <View style={styles.receiptItem}>
               <Text style={[styles.receiptNum, { color: Colors.light.success }]}>
-                {peopleStats.confirmed}
+                {receiptStats.confirmed}
               </Text>
               <Text style={styles.receiptLbl}>Confirmed</Text>
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptItem}>
               <Text style={[styles.receiptNum, { color: Colors.light.danger }]}>
-                {peopleStats.notConfirmed}
+                {receiptStats.notConfirmed}
               </Text>
               <Text style={styles.receiptLbl}>Not Confirmed</Text>
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptItem}>
               <Text style={[styles.receiptNum, { color: Colors.light.warning }]}>
-                {peopleStats.pending}
+                {receiptStats.pending}
               </Text>
               <Text style={styles.receiptLbl}>Pending</Text>
             </View>
           </View>
-          {peopleStats.total > 0 ? (
+          {receiptStats.total > 0 ? (
             <View style={styles.progressWrap}>
               <View style={styles.progressBg}>
                 <View
                   style={[
                     styles.progressFill,
                     {
-                      width: `${Math.round((peopleStats.confirmed / peopleStats.total) * 100)}%`,
+                      width: `${Math.round((receiptStats.confirmed / receiptStats.total) * 100)}%`,
                     },
                   ]}
                 />
               </View>
               <Text style={styles.progressText}>
-                {Math.round((peopleStats.confirmed / peopleStats.total) * 100)}% confirmed
+                {Math.round((receiptStats.confirmed / receiptStats.total) * 100)}% confirmed
               </Text>
             </View>
           ) : null}
@@ -189,7 +165,7 @@ export default function DashboardScreen() {
         <StatCard
           icon="users"
           label="Total Users"
-          value={isPrivileged ? peopleStats.total : "—"}
+          value={isPrivileged ? receiptStats.total || "—" : "—"}
           color={Colors.light.tint}
           onPress={isPrivileged ? () => router.push("/(tabs)/users" as any) : undefined}
         />

@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { getQueryFn } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
+import { useEmergency } from "@/lib/emergency-context";
 
 interface PersonEntry {
   id: string;
@@ -43,8 +44,6 @@ interface PeopleResponse {
   people: PersonEntry[];
   zones: ZoneRef[];
   locations: LocationRef[];
-  hasActiveEmergency: boolean;
-  emergencyActivatedAt: string | null;
 }
 
 type PersonnelStatus = "safe" | "pending" | "need_help" | "no_reply";
@@ -125,6 +124,7 @@ function roleBadgeColor(role: string): string {
 
 export default function UsersMonitorScreen() {
   const { user } = useAuth();
+  const { isActive: hasEmergency, activatedAt: emergencyActivatedAt } = useEmergency();
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -155,11 +155,11 @@ export default function UsersMonitorScreen() {
     if (!data?.people) return [];
     return data.people.map((p) => ({
       ...p,
-      status: data.hasActiveEmergency
-        ? computeStatus(p, data.emergencyActivatedAt ?? null)
+      status: hasEmergency
+        ? computeStatus(p, emergencyActivatedAt)
         : null,
     }));
-  }, [data]);
+  }, [data?.people, hasEmergency, emergencyActivatedAt]);
 
   const filteredPeople = useMemo(() => {
     let list = peopleWithStatus;
@@ -178,23 +178,23 @@ export default function UsersMonitorScreen() {
       list = list.filter((p) => p.zoneId === zoneFilter);
     }
 
-    if (statusFilter !== "all" && data?.hasActiveEmergency) {
+    if (statusFilter !== "all" && hasEmergency) {
       list = list.filter((p) => p.status === statusFilter);
     }
 
     return list;
-  }, [peopleWithStatus, search, zoneFilter, statusFilter, data?.hasActiveEmergency]);
+  }, [peopleWithStatus, search, zoneFilter, statusFilter, hasEmergency]);
 
   const stats = useMemo(() => {
     const all = peopleWithStatus;
     const total = all.length;
-    if (!data?.hasActiveEmergency) return { total, safe: 0, pending: 0, needHelp: 0, noReply: 0 };
+    if (!hasEmergency) return { total, safe: 0, pending: 0, needHelp: 0, noReply: 0 };
     const safe = all.filter((p) => p.status === "safe").length;
     const pending = all.filter((p) => p.status === "pending").length;
     const needHelp = all.filter((p) => p.status === "need_help").length;
     const noReply = all.filter((p) => p.status === "no_reply").length;
     return { total, safe, pending, needHelp, noReply };
-  }, [peopleWithStatus, data?.hasActiveEmergency]);
+  }, [peopleWithStatus, hasEmergency]);
 
   const renderPerson = useCallback(
     ({ item }: { item: (typeof peopleWithStatus)[0] }) => {
@@ -205,12 +205,12 @@ export default function UsersMonitorScreen() {
       const statusLabel = item.status ? STATUS_LABELS[item.status] : undefined;
       const statusIcon = item.status ? STATUS_ICONS[item.status] : undefined;
       const badgeColor = roleBadgeColor(item.role);
-      const hasEmergency = data?.hasActiveEmergency;
+      const showStatus = hasEmergency;
 
       return (
         <View style={[
           styles.personCard,
-          hasEmergency && item.status ? { borderLeftWidth: 4, borderLeftColor: statusColor } : null,
+          showStatus && item.status ? { borderLeftWidth: 4, borderLeftColor: statusColor } : null,
         ]}>
           <View style={styles.cardHeader}>
             <View style={styles.nameSection}>
@@ -229,7 +229,7 @@ export default function UsersMonitorScreen() {
             <Text style={styles.locationText} numberOfLines={1}>{locationStr}</Text>
           </View>
 
-          {hasEmergency && statusLabel && statusColor && statusIcon ? (
+          {showStatus && statusLabel && statusColor && statusIcon ? (
             <View style={[styles.statusRow, { backgroundColor: statusColor + "0D" }]}>
               <Feather name={statusIcon} size={14} color={statusColor} />
               <Text style={[styles.statusLabel, { color: statusColor }]}>{statusLabel}</Text>
@@ -241,7 +241,7 @@ export default function UsersMonitorScreen() {
         </View>
       );
     },
-    [zoneMap, locationMap, data?.hasActiveEmergency]
+    [zoneMap, locationMap, hasEmergency]
   );
 
   if (isLoading) {
@@ -265,14 +265,14 @@ export default function UsersMonitorScreen() {
 
   return (
     <View style={styles.container}>
-      {data.hasActiveEmergency ? (
+      {hasEmergency ? (
         <View style={styles.emergencyBanner}>
           <Feather name="alert-triangle" size={14} color="#fff" />
           <Text style={styles.emergencyText}>EMERGENCY ACTIVE — Personnel Status Monitor</Text>
         </View>
       ) : null}
 
-      {data.hasActiveEmergency ? (
+      {hasEmergency ? (
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
             <Text style={styles.statNum}>{stats.total}</Text>
@@ -347,7 +347,7 @@ export default function UsersMonitorScreen() {
         </ScrollView>
       </View>
 
-      {data.hasActiveEmergency ? (
+      {hasEmergency ? (
         <View style={styles.statusFilters}>
           <ScrollView
             horizontal

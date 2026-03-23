@@ -7,13 +7,13 @@ import {
   selectZones,
   selectLocations,
   selectAlerts,
-  selectEmergencyMode,
   selectWindData,
 } from "@/lib/store";
 import { getQueryFn } from "@/lib/query-client";
+import { useEmergency } from "@/lib/emergency-context";
 import NativeMap from "@/components/NativeMap";
 import WindIndicator from "@/components/WindIndicator";
-import type { Zone, Location, Alert as AlertType, EmergencyMode, WindCondition } from "@shared/schema";
+import type { Zone, Location, Alert as AlertType, WindCondition } from "@shared/schema";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
@@ -24,13 +24,12 @@ export default function MapScreen() {
   const zones = useAppStore(selectZones);
   const locations = useAppStore(selectLocations);
   const alerts = useAppStore(selectAlerts);
-  const emergencyMode = useAppStore(selectEmergencyMode);
   const windData = useAppStore(selectWindData);
   const setZones = useAppStore((s) => s.setZones);
   const setLocations = useAppStore((s) => s.setLocations);
   const setAlerts = useAppStore((s) => s.setAlerts);
-  const setEmergencyMode = useAppStore((s) => s.setEmergencyMode);
   const setWindData = useAppStore((s) => s.setWindData);
+  const { emergencyMode } = useEmergency();
 
   const { data: zoneData, isLoading: zonesLoading } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
@@ -45,12 +44,6 @@ export default function MapScreen() {
   const { data: alertData } = useQuery<AlertType[]>({
     queryKey: ["/api/alerts"],
     queryFn: getQueryFn({ on401: "returnNull" }),
-  });
-
-  const { data: emergencyData } = useQuery<EmergencyMode | null>({
-    queryKey: ["/api/emergency/active"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    refetchInterval: 15000,
   });
 
   const { data: windDataResponse } = useQuery<WindCondition | null>({
@@ -70,10 +63,6 @@ export default function MapScreen() {
   useEffect(() => {
     if (alertData && Array.isArray(alertData)) setAlerts(alertData);
   }, [alertData]);
-
-  useEffect(() => {
-    if (emergencyData !== undefined) setEmergencyMode(emergencyData);
-  }, [emergencyData]);
 
   useEffect(() => {
     if (

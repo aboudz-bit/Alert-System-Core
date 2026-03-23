@@ -11,9 +11,10 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import { useAppStore, selectEmergencyMode } from "@/lib/store";
+import { useAppStore } from "@/lib/store";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
+import { useEmergency } from "@/lib/emergency-context";
 import type { EmergencyMode, EmergencyModeType, EmergencyReceipt } from "@shared/schema";
 
 type ReceiptUser = {
@@ -225,26 +226,8 @@ function ReceiptSummaryView({ emergencyModeId }: { emergencyModeId: string }) {
 
 export default function EmergencyPanel() {
   const { user } = useAuth();
-  const emergencyMode = useAppStore(selectEmergencyMode);
+  const { emergencyMode, isLoading } = useEmergency();
   const setEmergencyMode = useAppStore((s) => s.setEmergencyMode);
-
-  const { data: modeData, isLoading, isError } = useQuery<EmergencyMode | null>({
-    queryKey: ["/api/emergency/active"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    refetchInterval: 15000,
-  });
-
-  React.useEffect(() => {
-    if (modeData !== undefined) {
-      setEmergencyMode(modeData);
-    }
-  }, [modeData]);
-
-  React.useEffect(() => {
-    if (isError) {
-      setEmergencyMode(null);
-    }
-  }, [isError]);
 
   const canActivate =
     user?.role === "admin" ||
