@@ -55,7 +55,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pool: pool,
         createTableIfMissing: true,
       }),
-      secret: process.env.SESSION_SECRET || "emergency-alert-dev-secret",
+      secret: (() => {
+        const secret = process.env.SESSION_SECRET;
+        if (!secret && process.env.NODE_ENV === "production") {
+          throw new Error("SESSION_SECRET environment variable is required in production");
+        }
+        return secret || "emergency-alert-dev-secret";
+      })(),
       resave: false,
       saveUninitialized: false,
       cookie: {
@@ -202,6 +208,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/locations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const location = await storage.getLocation(req.params.id);
+      if (!location) {
+        return res.status(404).json({ message: "Location not found" });
+      }
+      return res.json(location);
+    } catch (error) {
+      console.error("Get location error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/locations/:id", requireRole("admin", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const location = await storage.updateLocation(req.params.id, req.body);
+      if (!location) {
+        return res.status(404).json({ message: "Location not found" });
+      }
+      return res.json(location);
+    } catch (error) {
+      console.error("Update location error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/locations/:id", requireRole("admin"), async (req: Request, res: Response) => {
     try {
       const deleted = await storage.deleteLocation(req.params.id);
@@ -225,6 +257,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/alerts/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const alert = await storage.getAlert(req.params.id);
+      if (!alert) {
+        return res.status(404).json({ message: "Alert not found" });
+      }
+      return res.json(alert);
+    } catch (error) {
+      console.error("Get alert error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/alerts", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
     try {
       const parsed = insertAlertSchema.safeParse(req.body);
@@ -242,6 +287,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/alerts/:id", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const alert = await storage.updateAlert(req.params.id, req.body);
+      if (!alert) {
+        return res.status(404).json({ message: "Alert not found" });
+      }
+      return res.json(alert);
+    } catch (error) {
+      console.error("Update alert error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.patch("/api/alerts/:id/clear", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
     try {
       const alert = await storage.clearAlert(req.params.id);
@@ -251,6 +309,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json(alert);
     } catch (error) {
       console.error("Clear alert error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/alerts/:id", requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteAlert(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Alert not found" });
+      }
+      return res.json({ message: "Alert deleted" });
+    } catch (error) {
+      console.error("Delete alert error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });

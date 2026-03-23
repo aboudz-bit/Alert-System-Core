@@ -29,12 +29,15 @@ export interface IStorage {
   getLocations(): Promise<Location[]>;
   getLocation(id: string): Promise<Location | undefined>;
   createLocation(location: InsertLocation): Promise<Location>;
+  updateLocation(id: string, location: Partial<InsertLocation>): Promise<Location | undefined>;
   deleteLocation(id: string): Promise<boolean>;
 
   getAlerts(): Promise<Alert[]>;
   getAlert(id: string): Promise<Alert | undefined>;
   createAlert(alert: InsertAlert & { createdBy?: string }): Promise<Alert>;
+  updateAlert(id: string, alert: Partial<InsertAlert>): Promise<Alert | undefined>;
   clearAlert(id: string): Promise<Alert | undefined>;
+  deleteAlert(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -95,6 +98,15 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async updateLocation(id: string, location: Partial<InsertLocation>): Promise<Location | undefined> {
+    const result = await db
+      .update(locations)
+      .set(location)
+      .where(eq(locations.id, id))
+      .returning();
+    return result[0];
+  }
+
   async deleteLocation(id: string): Promise<boolean> {
     const result = await db.delete(locations).where(eq(locations.id, id)).returning();
     return result.length > 0;
@@ -114,6 +126,15 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async updateAlert(id: string, alert: Partial<InsertAlert>): Promise<Alert | undefined> {
+    const result = await db
+      .update(alerts)
+      .set(alert)
+      .where(eq(alerts.id, id))
+      .returning();
+    return result[0];
+  }
+
   async clearAlert(id: string): Promise<Alert | undefined> {
     const result = await db
       .update(alerts)
@@ -121,6 +142,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(alerts.id, id))
       .returning();
     return result[0];
+  }
+
+  async deleteAlert(id: string): Promise<boolean> {
+    const result = await db.delete(alerts).where(eq(alerts.id, id)).returning();
+    return result.length > 0;
   }
 }
 

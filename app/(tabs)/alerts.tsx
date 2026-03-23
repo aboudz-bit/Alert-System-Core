@@ -67,7 +67,7 @@ export default function AlertsScreen() {
       await apiRequest("PATCH", `/api/alerts/${id}/clear`);
     },
     onSuccess: (_, id) => {
-      updateAlert(id, { status: "cleared", clearedAt: new Date() as any });
+      updateAlert(id, { status: "cleared", clearedAt: new Date() });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
     },
   });
