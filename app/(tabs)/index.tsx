@@ -8,10 +8,12 @@ import {
   selectLocations,
   selectAlerts,
   selectEmergencyMode,
+  selectWindData,
 } from "@/lib/store";
 import { getQueryFn } from "@/lib/query-client";
 import NativeMap from "@/components/NativeMap";
-import type { Zone, Location, Alert as AlertType, EmergencyMode } from "@shared/schema";
+import WindIndicator from "@/components/WindIndicator";
+import type { Zone, Location, Alert as AlertType, EmergencyMode, WindCondition } from "@shared/schema";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
@@ -23,10 +25,12 @@ export default function MapScreen() {
   const locations = useAppStore(selectLocations);
   const alerts = useAppStore(selectAlerts);
   const emergencyMode = useAppStore(selectEmergencyMode);
+  const windData = useAppStore(selectWindData);
   const setZones = useAppStore((s) => s.setZones);
   const setLocations = useAppStore((s) => s.setLocations);
   const setAlerts = useAppStore((s) => s.setAlerts);
   const setEmergencyMode = useAppStore((s) => s.setEmergencyMode);
+  const setWindData = useAppStore((s) => s.setWindData);
 
   const { data: zoneData, isLoading: zonesLoading } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
@@ -49,6 +53,12 @@ export default function MapScreen() {
     refetchInterval: 15000,
   });
 
+  const { data: windDataResponse } = useQuery<WindCondition | null>({
+    queryKey: ["/api/wind"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    refetchInterval: 30000,
+  });
+
   useEffect(() => {
     if (zoneData && Array.isArray(zoneData)) setZones(zoneData);
   }, [zoneData]);
@@ -64,6 +74,21 @@ export default function MapScreen() {
   useEffect(() => {
     if (emergencyData !== undefined) setEmergencyMode(emergencyData);
   }, [emergencyData]);
+
+  useEffect(() => {
+    if (
+      windDataResponse &&
+      typeof windDataResponse.direction === "number" &&
+      typeof windDataResponse.speed === "number"
+    ) {
+      setWindData({
+        direction: windDataResponse.direction,
+        speed: windDataResponse.speed,
+      });
+    } else {
+      setWindData(null);
+    }
+  }, [windDataResponse]);
 
   const safeZones = zones || [];
   const safeLocations = locations || [];
@@ -97,6 +122,8 @@ export default function MapScreen() {
     );
   }
 
+  const hasEmergency = emergencyMode && emergencyMode.status === "active";
+
   return (
     <View style={styles.container}>
       <NativeMap
@@ -104,9 +131,10 @@ export default function MapScreen() {
         locations={showMonitorContext ? safeLocations : undefined}
         activeAlerts={showMonitorContext ? activeAlerts : undefined}
         alertZoneIds={showMonitorContext ? alertZoneIds : undefined}
+        windData={showMonitorContext ? windData : undefined}
       />
 
-      {emergencyMode && emergencyMode.status === "active" ? (
+      {hasEmergency ? (
         <View
           style={[
             styles.emergencyBanner,
@@ -134,8 +162,8 @@ export default function MapScreen() {
             styles.alertBadge,
             {
               top: Platform.OS === "web"
-                ? 67 + (emergencyMode && emergencyMode.status === "active" ? 56 : 12)
-                : insets.top + (emergencyMode && emergencyMode.status === "active" ? 104 : 60),
+                ? 67 + (hasEmergency ? 56 : 12)
+                : insets.top + (hasEmergency ? 104 : 60),
             },
           ]}
         >
@@ -146,7 +174,20 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {safeZones.length === 0 && !emergencyMode ? (
+      {showMonitorContext && windData && windData.speed > 0 ? (
+        <View
+          style={[
+            styles.windOverlay,
+            {
+              bottom: Platform.OS === "web" ? 84 + 12 : 100,
+            },
+          ]}
+        >
+          <WindIndicator windData={windData} />
+        </View>
+      ) : null}
+
+      {safeZones.length === 0 && !hasEmergency ? (
         <View
           style={[
             styles.emptyOverlay,
@@ -242,5 +283,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600" as const,
     color: Colors.light.danger,
+  },
+  windOverlay: {
+    position: "absolute" as const,
+    right: 12,
   },
 });

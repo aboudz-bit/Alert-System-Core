@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-5)
+# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-6)
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-5: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, and alarm sound. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-6: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, and wind/hazard overlays. Stability is the top priority.
 
 ## Stack
 
@@ -37,7 +37,8 @@ components/
   NativeMap.tsx           # Native map with polygons, location markers, alert zone highlighting
 hooks/
   useEmergencyAlarm.ts    # Alarm sound: plays on emergency, repeats 30s until receipt confirmed
-  NativeMap.web.tsx       # Web fallback with zone/location/alert counts
+  WindIndicator.tsx       # Wind direction arrow + speed display overlay
+  NativeMap.web.tsx       # Web fallback with zone/location/alert/wind counts
 constants/
   colors.ts              # Color constants
 lib/
@@ -62,6 +63,7 @@ shared/
 - **alerts**: id, title, description, severity, status, zoneId (FK zones), createdBy (FK users)
 - **emergency_modes**: id, type (shelter_in/blackout), status (active/cleared), activatedBy (FK users), activatedAt, clearedAt, clearedBy (FK users)
 - **emergency_receipts**: id, emergencyModeId (FK emergency_modes), userId (FK users), confirmedAt (unique per mode+user)
+- **wind_conditions**: id, direction (0-360°), speed (km/h), updatedAt, updatedBy (FK users) — single row, upserted
 
 ## Roles
 
@@ -91,6 +93,8 @@ shared/
 - `GET /api/emergency/:id/receipt/me` - Get current user's receipt (all authenticated)
 - `GET /api/emergency/:id/receipts` - Get all receipts for emergency (admin/eco/supervisor)
 - `GET /api/emergency/:id/receipts/summary` - Get receipt summary with confirmed/not confirmed users (admin/eco/supervisor)
+- `GET /api/wind` - Get current wind conditions (all authenticated)
+- `POST /api/wind` - Update wind direction/speed (admin/eco/supervisor)
 
 ## Seed Users
 

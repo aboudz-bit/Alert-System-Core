@@ -1,11 +1,17 @@
 import { create } from "zustand";
-import type { Zone, Location, Alert, EmergencyMode } from "@shared/schema";
+import type { Zone, Location, Alert, EmergencyMode, WindCondition } from "@shared/schema";
+
+export interface WindData {
+  direction: number;
+  speed: number;
+}
 
 interface AppState {
   zones: Zone[];
   locations: Location[];
   alerts: Alert[];
   emergencyMode: EmergencyMode | null;
+  windData: WindData | null;
 
   setZones: (zones: Zone[]) => void;
   addZone: (zone: Zone) => void;
@@ -21,6 +27,7 @@ interface AppState {
   updateAlert: (id: string, alert: Partial<Alert>) => void;
 
   setEmergencyMode: (mode: EmergencyMode | null) => void;
+  setWindData: (wind: WindData | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -28,6 +35,7 @@ export const useAppStore = create<AppState>((set) => ({
   locations: [],
   alerts: [],
   emergencyMode: null,
+  windData: null,
 
   setZones: (zones) => set({ zones: Array.isArray(zones) ? zones : [] }),
   addZone: (zone) =>
@@ -66,6 +74,25 @@ export const useAppStore = create<AppState>((set) => ({
     })),
 
   setEmergencyMode: (mode) => set({ emergencyMode: mode || null }),
+  setWindData: (wind) => {
+    if (
+      wind &&
+      typeof wind.direction === "number" &&
+      typeof wind.speed === "number" &&
+      !isNaN(wind.direction) &&
+      !isNaN(wind.speed) &&
+      isFinite(wind.direction) &&
+      isFinite(wind.speed) &&
+      wind.direction >= 0 &&
+      wind.direction <= 360 &&
+      wind.speed >= 0 &&
+      wind.speed <= 300
+    ) {
+      set({ windData: { direction: wind.direction, speed: wind.speed } });
+    } else {
+      set({ windData: null });
+    }
+  },
 }));
 
 export const selectZones = (state: AppState) => state.zones || [];
@@ -74,3 +101,4 @@ export const selectAlerts = (state: AppState) => state.alerts || [];
 export const selectActiveAlerts = (state: AppState) =>
   (state.alerts || []).filter((a) => a.status === "active");
 export const selectEmergencyMode = (state: AppState) => state.emergencyMode;
+export const selectWindData = (state: AppState) => state.windData;

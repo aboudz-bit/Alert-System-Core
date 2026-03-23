@@ -10,12 +10,14 @@ import {
   type EmergencyMode,
   type EmergencyModeType,
   type EmergencyReceipt,
+  type WindCondition,
   users,
   zones,
   locations,
   alerts,
   emergencyModes,
   emergencyReceipts,
+  windConditions,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -53,6 +55,9 @@ export interface IStorage {
   confirmReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt>;
   getReceiptsByMode(emergencyModeId: string): Promise<EmergencyReceipt[]>;
   getUserReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt | undefined>;
+
+  getWindCondition(): Promise<WindCondition | undefined>;
+  updateWindCondition(direction: number, speed: number, updatedBy: string): Promise<WindCondition>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -233,6 +238,28 @@ export class DatabaseStorage implements IStorage {
           eq(emergencyReceipts.userId, userId)
         )
       );
+    return result[0];
+  }
+
+  async getWindCondition(): Promise<WindCondition | undefined> {
+    const result = await db.select().from(windConditions);
+    return result[0];
+  }
+
+  async updateWindCondition(direction: number, speed: number, updatedBy: string): Promise<WindCondition> {
+    const existing = await this.getWindCondition();
+    if (existing) {
+      const result = await db
+        .update(windConditions)
+        .set({ direction, speed, updatedAt: new Date(), updatedBy })
+        .where(eq(windConditions.id, existing.id))
+        .returning();
+      return result[0];
+    }
+    const result = await db
+      .insert(windConditions)
+      .values({ direction, speed, updatedBy })
+      .returning();
     return result[0];
   }
 }

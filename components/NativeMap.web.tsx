@@ -3,15 +3,23 @@ import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import type { Zone, Location, Alert } from "@shared/schema";
+import type { WindData } from "@/lib/store";
 
 interface NativeMapProps {
   zones: Zone[];
   locations?: Location[];
   activeAlerts?: Alert[];
   alertZoneIds?: Set<string>;
+  windData?: WindData | null;
 }
 
-export default function NativeMap({ zones, locations, activeAlerts }: NativeMapProps) {
+function getWindDirectionLabel(degrees: number): string {
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const index = Math.round(((degrees % 360) + 360) % 360 / 45) % 8;
+  return dirs[index];
+}
+
+export default function NativeMap({ zones, locations, activeAlerts, windData }: NativeMapProps) {
   const safeZones = Array.isArray(zones) ? zones : [];
   const safeLocations = Array.isArray(locations) ? locations : [];
   const safeAlerts = Array.isArray(activeAlerts) ? activeAlerts : [];
@@ -34,6 +42,14 @@ export default function NativeMap({ zones, locations, activeAlerts }: NativeMapP
         <Text style={[styles.text, { color: Colors.light.danger }]}>
           {safeAlerts.length} active alert{safeAlerts.length !== 1 ? "s" : ""}
         </Text>
+      ) : null}
+      {windData && windData.speed > 0 ? (
+        <View style={styles.windRow}>
+          <Feather name="wind" size={16} color={Colors.light.tint} />
+          <Text style={styles.windText}>
+            Wind: {getWindDirectionLabel(windData.direction)} at {windData.speed} km/h
+          </Text>
+        </View>
       ) : null}
       <Text style={styles.hint}>
         Map rendering is available on mobile devices
@@ -64,5 +80,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.tabIconDefault,
     marginTop: 8,
+  },
+  windRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+  },
+  windText: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.light.tint,
   },
 });

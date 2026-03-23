@@ -117,8 +117,23 @@ export const emergencyReceipts = pgTable("emergency_receipts", {
   unique().on(table.emergencyModeId, table.userId),
 ]);
 
+export const windConditions = pgTable("wind_conditions", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  direction: real("direction").notNull().default(0),
+  speed: real("speed").notNull().default(0),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+});
+
 export const activateEmergencySchema = z.object({
   type: z.enum(["shelter_in", "blackout"]),
+});
+
+export const updateWindSchema = z.object({
+  direction: z.number().min(0).max(360),
+  speed: z.number().min(0).max(300),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -133,3 +148,4 @@ export type EmergencyMode = typeof emergencyModes.$inferSelect;
 export type EmergencyReceipt = typeof emergencyReceipts.$inferSelect;
 export type EmergencyModeType = "shelter_in" | "blackout";
 export type UserRole = "admin" | "eco" | "supervisor" | "user";
+export type WindCondition = typeof windConditions.$inferSelect;

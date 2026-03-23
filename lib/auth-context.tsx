@@ -93,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       store.setLocations([]);
       store.setAlerts([]);
       store.setEmergencyMode(null);
+      store.setWindData(null);
     }
   }, []);
 

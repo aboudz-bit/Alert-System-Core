@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema } from "@shared/schema";
+import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 const PgSession = connectPgSimple(session);
@@ -451,6 +451,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json({ confirmed, notConfirmed, total: allUsers.length });
     } catch (error) {
       console.error("Get receipts summary error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/wind", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const wind = await storage.getWindCondition();
+      return res.json(wind || { direction: 0, speed: 0, updatedAt: null, updatedBy: null });
+    } catch (error) {
+      console.error("Get wind error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/wind", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const parsed = updateWindSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid wind data", errors: parsed.error.issues });
+      }
+      const wind = await storage.updateWindCondition(parsed.data.direction, parsed.data.speed, userId);
+      return res.json(wind);
+    } catch (error) {
+      console.error("Update wind error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
