@@ -6,6 +6,8 @@ import { z } from "zod";
 export const roleEnum = pgEnum("user_role", ["admin", "eco", "supervisor", "user"]);
 export const alertStatusEnum = pgEnum("alert_status", ["active", "cleared"]);
 export const alertSeverityEnum = pgEnum("alert_severity", ["low", "medium", "high", "critical"]);
+export const emergencyModeTypeEnum = pgEnum("emergency_mode_type", ["shelter_in", "blackout"]);
+export const emergencyModeStatusEnum = pgEnum("emergency_mode_status", ["active", "cleared"]);
 
 export const users = pgTable("users", {
   id: varchar("id")
@@ -55,6 +57,18 @@ export const alerts = pgTable("alerts", {
   clearedAt: timestamp("cleared_at"),
 });
 
+export const emergencyModes = pgTable("emergency_modes", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  type: emergencyModeTypeEnum("type").notNull(),
+  status: emergencyModeStatusEnum("status").notNull().default("active"),
+  activatedBy: varchar("activated_by").references(() => users.id),
+  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+  clearedAt: timestamp("cleared_at"),
+  clearedBy: varchar("cleared_by").references(() => users.id),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -88,6 +102,10 @@ export const insertAlertSchema = createInsertSchema(alerts).pick({
   zoneId: true,
 });
 
+export const activateEmergencySchema = z.object({
+  type: z.enum(["shelter_in", "blackout"]),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Zone = typeof zones.$inferSelect;
@@ -96,4 +114,6 @@ export type Location = typeof locations.$inferSelect;
 export type InsertLocation = z.infer<typeof insertLocationSchema>;
 export type Alert = typeof alerts.$inferSelect;
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
+export type EmergencyMode = typeof emergencyModes.$inferSelect;
+export type EmergencyModeType = "shelter_in" | "blackout";
 export type UserRole = "admin" | "eco" | "supervisor" | "user";

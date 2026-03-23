@@ -7,13 +7,16 @@ import {
   type InsertLocation,
   type Alert,
   type InsertAlert,
+  type EmergencyMode,
+  type EmergencyModeType,
   users,
   zones,
   locations,
   alerts,
+  emergencyModes,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -38,6 +41,11 @@ export interface IStorage {
   updateAlert(id: string, alert: Partial<InsertAlert>): Promise<Alert | undefined>;
   clearAlert(id: string): Promise<Alert | undefined>;
   deleteAlert(id: string): Promise<boolean>;
+
+  getActiveEmergencyMode(): Promise<EmergencyMode | undefined>;
+  getEmergencyModes(): Promise<EmergencyMode[]>;
+  activateEmergencyMode(type: EmergencyModeType, activatedBy: string): Promise<EmergencyMode>;
+  clearEmergencyMode(id: string, clearedBy: string): Promise<EmergencyMode | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -147,6 +155,42 @@ export class DatabaseStorage implements IStorage {
   async deleteAlert(id: string): Promise<boolean> {
     const result = await db.delete(alerts).where(eq(alerts.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getActiveEmergencyMode(): Promise<EmergencyMode | undefined> {
+    const result = await db
+      .select()
+      .from(emergencyModes)
+      .where(eq(emergencyModes.status, "active"));
+    return result[0];
+  }
+
+  async getEmergencyModes(): Promise<EmergencyMode[]> {
+    return db.select().from(emergencyModes);
+  }
+
+  async activateEmergencyMode(type: EmergencyModeType, activatedBy: string): Promise<EmergencyMode> {
+    return db.transaction(async (tx) => {
+      await tx
+        .update(emergencyModes)
+        .set({ status: "cleared", clearedAt: new Date(), clearedBy: activatedBy })
+        .where(eq(emergencyModes.status, "active"));
+
+      const result = await tx
+        .insert(emergencyModes)
+        .values({ type, activatedBy })
+        .returning();
+      return result[0];
+    });
+  }
+
+  async clearEmergencyMode(id: string, clearedBy: string): Promise<EmergencyMode | undefined> {
+    const result = await db
+      .update(emergencyModes)
+      .set({ status: "cleared", clearedAt: new Date(), clearedBy })
+      .where(and(eq(emergencyModes.id, id), eq(emergencyModes.status, "active")))
+      .returning();
+    return result[0];
   }
 }
 

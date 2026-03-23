@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import type { Zone, Location, Alert } from "@shared/schema";
+import type { Zone, Location, Alert, EmergencyMode } from "@shared/schema";
 
 interface AppState {
   zones: Zone[];
   locations: Location[];
   alerts: Alert[];
+  emergencyMode: EmergencyMode | null;
 
   setZones: (zones: Zone[]) => void;
   addZone: (zone: Zone) => void;
@@ -18,12 +19,15 @@ interface AppState {
   setAlerts: (alerts: Alert[]) => void;
   addAlert: (alert: Alert) => void;
   updateAlert: (id: string, alert: Partial<Alert>) => void;
+
+  setEmergencyMode: (mode: EmergencyMode | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
   zones: [],
   locations: [],
   alerts: [],
+  emergencyMode: null,
 
   setZones: (zones) => set({ zones: Array.isArray(zones) ? zones : [] }),
   addZone: (zone) =>
@@ -60,6 +64,8 @@ export const useAppStore = create<AppState>((set) => ({
         a.id === id ? { ...a, ...updates } : a
       ),
     })),
+
+  setEmergencyMode: (mode) => set({ emergencyMode: mode || null }),
 }));
 
 export const selectZones = (state: AppState) => state.zones || [];
@@ -67,3 +73,4 @@ export const selectLocations = (state: AppState) => state.locations || [];
 export const selectAlerts = (state: AppState) => state.alerts || [];
 export const selectActiveAlerts = (state: AppState) =>
   (state.alerts || []).filter((a) => a.status === "active");
+export const selectEmergencyMode = (state: AppState) => state.emergencyMode;

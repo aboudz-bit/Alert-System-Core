@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema } from "@shared/schema";
+import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 const PgSession = connectPgSimple(session);
@@ -329,6 +329,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json({ message: "Alert deleted" });
     } catch (error) {
       console.error("Delete alert error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/emergency/active", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const mode = await storage.getActiveEmergencyMode();
+      return res.json(mode || null);
+    } catch (error) {
+      console.error("Get active emergency mode error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/emergency/history", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const modes = await storage.getEmergencyModes();
+      return res.json(modes);
+    } catch (error) {
+      console.error("Get emergency modes error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/emergency/activate", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const parsed = activateEmergencySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid emergency mode type" });
+      }
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const mode = await storage.activateEmergencyMode(parsed.data.type, userId);
+      return res.status(201).json(mode);
+    } catch (error) {
+      console.error("Activate emergency mode error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/emergency/:id/clear", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const mode = await storage.clearEmergencyMode(req.params.id, userId);
+      if (!mode) {
+        return res.status(404).json({ message: "Active emergency mode not found" });
+      }
+      return res.json(mode);
+    } catch (error) {
+      console.error("Clear emergency mode error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });

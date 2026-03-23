@@ -18,6 +18,7 @@ import { useAppStore, selectAlerts, selectZones } from "@/lib/store";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import type { Alert as AlertType, Zone } from "@shared/schema";
+import EmergencyPanel from "@/components/EmergencyPanel";
 
 function getSeverityColor(severity: string): string {
   switch (severity) {
@@ -158,16 +159,26 @@ export default function AlertsScreen() {
           <ActivityIndicator size="large" color={Colors.light.tint} />
         </View>
       ) : sortedAlerts.length === 0 ? (
-        <View style={styles.center}>
-          <Feather name="bell-off" size={48} color={Colors.light.tabIconDefault} />
-          <Text style={styles.emptyTitle}>No Alerts</Text>
-          <Text style={styles.emptyText}>All clear — no alerts at this time</Text>
+        <View style={styles.emptyContainer}>
+          <View style={styles.emergencyPanelWrapper}>
+            <EmergencyPanel />
+          </View>
+          <View style={styles.center}>
+            <Feather name="bell-off" size={48} color={Colors.light.tabIconDefault} />
+            <Text style={styles.emptyTitle}>No Alerts</Text>
+            <Text style={styles.emptyText}>All clear — no alerts at this time</Text>
+          </View>
         </View>
       ) : (
         <FlatList
           data={sortedAlerts}
           keyExtractor={(item) => item.id}
           renderItem={renderAlert}
+          ListHeaderComponent={
+            <View style={styles.emergencyPanelWrapper}>
+              <EmergencyPanel />
+            </View>
+          }
           contentContainerStyle={[
             styles.list,
             { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 90 },
@@ -197,6 +208,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  emptyContainer: {
+    flex: 1,
+  },
+  emergencyPanelWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   center: {
     flex: 1,

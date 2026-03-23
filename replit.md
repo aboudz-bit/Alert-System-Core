@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1
+# Emergency Alert System - Phase 1 + Phase 2 (Shelter In / Blackout)
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Step 1 adds Shelter In Place / Blackout emergency mode activation and clearing. Stability is the top priority.
 
 ## Stack
 
@@ -28,22 +28,23 @@ app/                      # Expo Router screens
     index.tsx             # Map screen (safe rendering)
     zones.tsx             # Zones list
     locations.tsx         # Locations list
-    alerts.tsx            # Alerts list with clear action
+    alerts.tsx            # Alerts list with clear action + EmergencyPanel
     settings.tsx          # User info + logout
 components/
   ErrorBoundary.tsx       # Class-based error boundary
   ErrorFallback.tsx       # Error UI with restart
+  EmergencyPanel.tsx      # Shelter In / Blackout activate + clear UI
   NativeMap.tsx           # Native map with polygon rendering
   NativeMap.web.tsx       # Web fallback (no react-native-maps)
 constants/
   colors.ts              # Color constants
 lib/
   auth-context.tsx        # Auth provider + useAuth hook
-  store.ts                # Zustand store (zones, locations, alerts)
+  store.ts                # Zustand store (zones, locations, alerts, emergencyMode)
   query-client.ts         # React Query client + API helpers
 server/
   index.ts                # Express server setup
-  routes.ts               # API routes (auth, zones, locations, alerts)
+  routes.ts               # API routes (auth, zones, locations, alerts, emergency)
   storage.ts              # DatabaseStorage with drizzle-orm CRUD
   db.ts                   # PostgreSQL connection pool
   seed.ts                 # Seed script for default users
@@ -57,15 +58,16 @@ shared/
 - **zones**: id, name, description, polygon (jsonb), color
 - **locations**: id, name, latitude, longitude, zoneId (FK zones)
 - **alerts**: id, title, description, severity, status, zoneId (FK zones), createdBy (FK users)
+- **emergency_modes**: id, type (shelter_in/blackout), status (active/cleared), activatedBy (FK users), activatedAt, clearedAt, clearedBy (FK users)
 
 ## Roles
 
-| Role       | Tabs                                   | Can Create Alerts |
-|------------|----------------------------------------|-------------------|
-| Admin      | Map, Zones, Locations, Alerts, Settings | Yes              |
-| Supervisor | Map, Zones, Alerts, Settings           | Yes               |
-| ECO        | Map, Alerts, Settings                  | Yes               |
-| User       | Map, Alerts, Settings                  | No (read-only)    |
+| Role       | Tabs                                   | Can Create Alerts | Can Activate Emergency |
+|------------|----------------------------------------|-------------------|----------------------|
+| Admin      | Map, Zones, Locations, Alerts, Settings | Yes              | Yes                  |
+| Supervisor | Map, Zones, Alerts, Settings           | Yes               | Yes                  |
+| ECO        | Map, Alerts, Settings                  | Yes               | Yes                  |
+| User       | Map, Alerts, Settings                  | No (read-only)    | No (view only)       |
 
 ## API Routes
 
@@ -78,6 +80,10 @@ shared/
 - `DELETE /api/locations/:id` - Delete location
 - `GET/POST /api/alerts` - List/Create alerts
 - `PATCH /api/alerts/:id/clear` - Clear an alert
+- `GET /api/emergency/active` - Get current active emergency mode (all authenticated)
+- `GET /api/emergency/history` - Get all emergency modes history (all authenticated)
+- `POST /api/emergency/activate` - Activate shelter_in or blackout (admin/eco/supervisor)
+- `PATCH /api/emergency/:id/clear` - Clear active emergency mode (admin/eco/supervisor)
 
 ## Seed Users
 
@@ -97,8 +103,10 @@ shared/
 
 - All Zustand arrays default to []
 - All selectors guard with || []
+- emergencyMode defaults to null, setter coerces falsy to null
 - Maps use coordinate validation before rendering
 - Polygons validated (min 3 points, valid lat/lng)
 - No non-null assertions anywhere
 - Error boundaries wrap all screen content
 - Platform.OS checks for web vs native map rendering
+- activateEmergencyMode auto-clears any existing active mode before creating new one

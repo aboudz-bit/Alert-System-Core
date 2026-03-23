@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { getApiUrl, queryClient } from "@/lib/query-client";
+import { useAppStore } from "@/lib/store";
 import { fetch } from "expo/fetch";
 import type { UserRole } from "@shared/schema";
 
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setUser(null);
       queryClient.clear();
+      useAppStore.getState().setEmergencyMode(null);
     }
   }, []);
 
