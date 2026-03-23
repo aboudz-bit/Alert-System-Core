@@ -1,45 +1,62 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
   Text,
   ScrollView,
   Platform,
-  ActivityIndicator,
+  Pressable,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { getQueryFn } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Zone, Alert as AlertType, EmergencyMode } from "@shared/schema";
+
+interface PersonEntry {
+  id: string;
+  name: string;
+  role: string;
+  receiptStatus: "confirmed" | "not_confirmed" | null;
+}
+
+interface PeopleResponse {
+  people: PersonEntry[];
+  hasActiveEmergency: boolean;
+}
 
 function StatCard({
   icon,
   label,
   value,
   color,
+  onPress,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
   value: string | number;
   color: string;
+  onPress?: () => void;
 }) {
+  const Wrapper = onPress ? Pressable : View;
   return (
-    <View style={styles.statCard}>
+    <Wrapper style={styles.statCard} onPress={onPress}>
       <View style={[styles.statIconWrap, { backgroundColor: color + "18" }]}>
-        <Feather name={icon} size={18} color={color} />
+        <Feather name={icon} size={16} color={color} />
       </View>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    </Wrapper>
   );
 }
 
 export default function DashboardScreen() {
   const { user } = useAuth();
-  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const isPrivileged =
+    user?.role === "admin" || user?.role === "eco" || user?.role === "supervisor";
 
   const { data: zones } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
@@ -57,10 +74,29 @@ export default function DashboardScreen() {
     refetchInterval: 15000,
   });
 
+  const { data: peopleData } = useQuery<PeopleResponse>({
+    queryKey: ["/api/people"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: isPrivileged,
+    refetchInterval: 15000,
+  });
+
   const safeZones = Array.isArray(zones) ? zones : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-  const activeAlerts = safeAlerts.filter((a) => a.status === "active");
+  const activeAlerts = useMemo(
+    () => safeAlerts.filter((a) => a.status === "active"),
+    [safeAlerts]
+  );
   const hasEmergency = emergency && emergency.status === "active";
+
+  const peopleStats = useMemo(() => {
+    if (!peopleData?.people) return { total: 0, confirmed: 0, notConfirmed: 0, pending: 0 };
+    const total = peopleData.people.length;
+    const confirmed = peopleData.people.filter((p) => p.receiptStatus === "confirmed").length;
+    const notConfirmed = peopleData.people.filter((p) => p.receiptStatus === "not_confirmed").length;
+    const pending = total - confirmed;
+    return { total, confirmed, notConfirmed, pending };
+  }, [peopleData?.people]);
 
   return (
     <ScrollView
@@ -104,25 +140,118 @@ export default function DashboardScreen() {
         </View>
       )}
 
+      {isPrivileged && hasEmergency ? (
+        <View style={styles.receiptSection}>
+          <Text style={styles.sectionTitle}>Receipt Status</Text>
+          <View style={styles.receiptBar}>
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: Colors.light.success }]}>
+                {peopleStats.confirmed}
+              </Text>
+              <Text style={styles.receiptLbl}>Confirmed</Text>
+            </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: Colors.light.danger }]}>
+                {peopleStats.notConfirmed}
+              </Text>
+              <Text style={styles.receiptLbl}>Not Confirmed</Text>
+            </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: Colors.light.warning }]}>
+                {peopleStats.pending}
+              </Text>
+              <Text style={styles.receiptLbl}>Pending</Text>
+            </View>
+          </View>
+          {peopleStats.total > 0 ? (
+            <View style={styles.progressWrap}>
+              <View style={styles.progressBg}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${Math.round((peopleStats.confirmed / peopleStats.total) * 100)}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {Math.round((peopleStats.confirmed / peopleStats.total) * 100)}% confirmed
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.statsRow}>
+        <StatCard
+          icon="users"
+          label="Total Users"
+          value={isPrivileged ? peopleStats.total : "—"}
+          color={Colors.light.tint}
+          onPress={isPrivileged ? () => router.push("/(tabs)/users" as any) : undefined}
+        />
         <StatCard
           icon="layers"
           label="Zones"
           value={safeZones.length}
-          color={Colors.light.tint}
+          color="#8E8E93"
         />
+      </View>
+
+      <View style={styles.statsRow}>
         <StatCard
           icon="alert-triangle"
           label="Active Alerts"
           value={activeAlerts.length}
           color={activeAlerts.length > 0 ? Colors.light.danger : Colors.light.success}
+          onPress={() => router.push("/(tabs)/alerts" as any)}
+        />
+        <StatCard
+          icon="shield"
+          label="Emergency"
+          value={hasEmergency ? "ACTIVE" : "None"}
+          color={hasEmergency ? Colors.light.danger : Colors.light.success}
         />
       </View>
 
-      <View style={styles.infoSection}>
-        <Text style={styles.infoTitle}>Welcome, {user?.name || "User"}</Text>
-        <Text style={styles.infoRole}>{user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "User"}</Text>
-      </View>
+      {isPrivileged ? (
+        <View style={styles.quickSection}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickGrid}>
+            <Pressable
+              style={styles.quickBtn}
+              onPress={() => router.push("/(tabs)/alerts" as any)}
+            >
+              <Feather name="bell" size={18} color={Colors.light.tint} />
+              <Text style={styles.quickLabel}>Alerts</Text>
+            </Pressable>
+            <Pressable
+              style={styles.quickBtn}
+              onPress={() => router.push("/(tabs)/users" as any)}
+            >
+              <Feather name="users" size={18} color={Colors.light.tint} />
+              <Text style={styles.quickLabel}>Users</Text>
+            </Pressable>
+            <Pressable
+              style={styles.quickBtn}
+              onPress={() => router.push("/(tabs)/index" as any)}
+            >
+              <Feather name="map" size={18} color={Colors.light.tint} />
+              <Text style={styles.quickLabel}>Zone Map</Text>
+            </Pressable>
+            <Pressable
+              style={styles.quickBtn}
+              onPress={() => router.push("/(tabs)/zones" as any)}
+            >
+              <Feather name="layers" size={18} color={Colors.light.tint} />
+              <Text style={styles.quickLabel}>Zones</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {activeAlerts.length > 0 ? (
         <View style={styles.alertSection}>
@@ -204,64 +333,122 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.light.textSecondary,
   },
+  receiptSection: {
+    backgroundColor: Colors.light.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    gap: 12,
+  },
+  receiptBar: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+  },
+  receiptItem: {
+    flex: 1,
+    alignItems: "center" as const,
+    gap: 2,
+  },
+  receiptNum: {
+    fontSize: 20,
+    fontWeight: "700" as const,
+  },
+  receiptLbl: {
+    fontSize: 11,
+    color: Colors.light.textSecondary,
+    fontWeight: "500" as const,
+  },
+  receiptDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: Colors.light.border,
+  },
+  progressWrap: {
+    gap: 4,
+  },
+  progressBg: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.light.border,
+    overflow: "hidden" as const,
+  },
+  progressFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.light.success,
+  },
+  progressText: {
+    fontSize: 11,
+    color: Colors.light.textSecondary,
+    fontWeight: "500" as const,
+  },
   statsRow: {
     flexDirection: "row" as const,
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   statCard: {
     flex: 1,
     backgroundColor: Colors.light.surface,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     alignItems: "center" as const,
-    gap: 6,
+    gap: 4,
     borderWidth: 1,
     borderColor: Colors.light.border,
   },
   statIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center" as const,
     justifyContent: "center" as const,
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700" as const,
     color: Colors.light.text,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.light.textSecondary,
     fontWeight: "500" as const,
-  },
-  infoSection: {
-    backgroundColor: Colors.light.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: "600" as const,
-    color: Colors.light.text,
-  },
-  infoRole: {
-    fontSize: 13,
-    color: Colors.light.textSecondary,
-    marginTop: 2,
-  },
-  alertSection: {
-    gap: 8,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700" as const,
     color: Colors.light.text,
-    marginBottom: 4,
+  },
+  quickSection: {
+    marginBottom: 16,
+    gap: 10,
+  },
+  quickGrid: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 10,
+  },
+  quickBtn: {
+    width: "47%" as any,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    backgroundColor: Colors.light.surface,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  quickLabel: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.light.text,
+  },
+  alertSection: {
+    gap: 8,
+    marginBottom: 16,
   },
   alertRow: {
     flexDirection: "row" as const,
