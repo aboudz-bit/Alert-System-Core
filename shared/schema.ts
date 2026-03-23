@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: roleEnum("role").notNull().default("user"),
+  badgeNumber: text("badge_number"),
   zoneId: varchar("zone_id").references(() => zones.id),
   locationId: varchar("location_id").references(() => locations.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -76,6 +77,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
   name: true,
   role: true,
+  badgeNumber: true,
 });
 
 export const loginSchema = z.object({

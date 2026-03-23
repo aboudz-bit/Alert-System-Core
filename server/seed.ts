@@ -17,6 +17,7 @@ async function seed() {
     password: hashPassword("admin123"),
     name: "System Admin",
     role: "admin",
+    badgeNumber: "1001",
   });
 
   await storage.createUser({
@@ -24,6 +25,7 @@ async function seed() {
     password: hashPassword("eco123"),
     name: "ECO Officer",
     role: "eco",
+    badgeNumber: "2001",
   });
 
   await storage.createUser({
@@ -31,6 +33,7 @@ async function seed() {
     password: hashPassword("super123"),
     name: "Site Supervisor",
     role: "supervisor",
+    badgeNumber: "3001",
   });
 
   await storage.createUser({
@@ -38,6 +41,7 @@ async function seed() {
     password: hashPassword("user123"),
     name: "Staff Member",
     role: "user",
+    badgeNumber: "4001",
   });
 
   console.log("Seed complete. Users created:");

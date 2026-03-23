@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   TextInput,
+  ScrollView,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -20,6 +21,7 @@ interface PersonEntry {
   name: string;
   username: string;
   role: string;
+  badgeNumber: string | null;
   zoneId: string | null;
   locationId: string | null;
   receiptStatus: "confirmed" | "not_confirmed" | null;
@@ -42,9 +44,54 @@ interface PeopleResponse {
   zones: ZoneRef[];
   locations: LocationRef[];
   hasActiveEmergency: boolean;
+  emergencyActivatedAt: string | null;
 }
 
-type StatusFilter = "all" | "confirmed" | "not_confirmed";
+type PersonnelStatus = "safe" | "pending" | "need_help" | "no_reply";
+type StatusFilter = "all" | "safe" | "pending" | "need_help" | "no_reply";
+
+const STATUS_COLORS: Record<PersonnelStatus, string> = {
+  safe: Colors.light.success,
+  pending: Colors.light.warning,
+  need_help: Colors.light.danger,
+  no_reply: Colors.light.tabIconDefault,
+};
+
+const STATUS_LABELS: Record<PersonnelStatus, string> = {
+  safe: "Safe",
+  pending: "Pending",
+  need_help: "Need Help",
+  no_reply: "No Reply",
+};
+
+const STATUS_ICONS: Record<PersonnelStatus, keyof typeof Feather.glyphMap> = {
+  safe: "check-circle",
+  pending: "clock",
+  need_help: "alert-triangle",
+  no_reply: "minus-circle",
+};
+
+const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "safe", label: "Safe" },
+  { key: "pending", label: "Pending" },
+  { key: "need_help", label: "Need Help" },
+  { key: "no_reply", label: "No Reply" },
+];
+
+const PENDING_WINDOW_MS = 10 * 60 * 1000;
+
+function computeStatus(person: PersonEntry, emergencyActivatedAt: string | null): PersonnelStatus {
+  if (person.receiptStatus === "confirmed") return "safe";
+  if (person.receiptStatus === "not_confirmed") {
+    if (emergencyActivatedAt) {
+      const elapsed = Date.now() - new Date(emergencyActivatedAt).getTime();
+      if (elapsed < PENDING_WINDOW_MS) return "pending";
+    }
+    return "no_reply";
+  }
+  return "no_reply";
+}
 
 function formatTime(iso: string | null): string {
   if (!iso) return "";
@@ -78,7 +125,6 @@ function roleBadgeColor(role: string): string {
 
 export default function UsersMonitorScreen() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -105,16 +151,26 @@ export default function UsersMonitorScreen() {
     return m;
   }, [data?.locations]);
 
-  const filteredPeople = useMemo(() => {
+  const peopleWithStatus = useMemo(() => {
     if (!data?.people) return [];
-    let list = data.people;
+    return data.people.map((p) => ({
+      ...p,
+      status: data.hasActiveEmergency
+        ? computeStatus(p, data.emergencyActivatedAt ?? null)
+        : null,
+    }));
+  }, [data]);
+
+  const filteredPeople = useMemo(() => {
+    let list = peopleWithStatus;
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
         (p) =>
           p.name.toLowerCase().includes(q) ||
-          p.username.toLowerCase().includes(q)
+          p.username.toLowerCase().includes(q) ||
+          (p.badgeNumber && p.badgeNumber.includes(q))
       );
     }
 
@@ -122,75 +178,64 @@ export default function UsersMonitorScreen() {
       list = list.filter((p) => p.zoneId === zoneFilter);
     }
 
-    if (statusFilter !== "all" && data.hasActiveEmergency) {
-      list = list.filter((p) => p.receiptStatus === statusFilter);
+    if (statusFilter !== "all" && data?.hasActiveEmergency) {
+      list = list.filter((p) => p.status === statusFilter);
     }
 
     return list;
-  }, [data, search, zoneFilter, statusFilter]);
+  }, [peopleWithStatus, search, zoneFilter, statusFilter, data?.hasActiveEmergency]);
 
   const stats = useMemo(() => {
-    if (!data?.people) return { total: 0, confirmed: 0, notConfirmed: 0 };
-    const total = data.people.length;
-    const confirmed = data.people.filter((p) => p.receiptStatus === "confirmed").length;
-    const notConfirmed = data.people.filter((p) => p.receiptStatus === "not_confirmed").length;
-    return { total, confirmed, notConfirmed };
-  }, [data?.people]);
+    const all = peopleWithStatus;
+    const total = all.length;
+    if (!data?.hasActiveEmergency) return { total, safe: 0, pending: 0, needHelp: 0, noReply: 0 };
+    const safe = all.filter((p) => p.status === "safe").length;
+    const pending = all.filter((p) => p.status === "pending").length;
+    const needHelp = all.filter((p) => p.status === "need_help").length;
+    const noReply = all.filter((p) => p.status === "no_reply").length;
+    return { total, safe, pending, needHelp, noReply };
+  }, [peopleWithStatus, data?.hasActiveEmergency]);
 
   const renderPerson = useCallback(
-    ({ item }: { item: PersonEntry }) => {
+    ({ item }: { item: (typeof peopleWithStatus)[0] }) => {
       const zoneName = item.zoneId ? zoneMap.get(item.zoneId) || "Unknown" : "Unassigned";
-      const locName = item.locationId ? locationMap.get(item.locationId) || "Unknown" : null;
+      const locName = item.locationId ? locationMap.get(item.locationId) || "" : "";
+      const locationStr = locName ? `${zoneName} / ${locName}` : zoneName;
+      const statusColor = item.status ? STATUS_COLORS[item.status] : undefined;
+      const statusLabel = item.status ? STATUS_LABELS[item.status] : undefined;
+      const statusIcon = item.status ? STATUS_ICONS[item.status] : undefined;
       const badgeColor = roleBadgeColor(item.role);
+      const hasEmergency = data?.hasActiveEmergency;
 
       return (
-        <View style={styles.personCard}>
-          <View style={styles.personTop}>
-            <View style={styles.personAvatar}>
-              <Text style={styles.personInitial}>
-                {item.name.charAt(0).toUpperCase()}
-              </Text>
+        <View style={[
+          styles.personCard,
+          hasEmergency && item.status ? { borderLeftWidth: 4, borderLeftColor: statusColor } : null,
+        ]}>
+          <View style={styles.cardHeader}>
+            <View style={styles.nameSection}>
+              <Text style={styles.personName} numberOfLines={1}>{item.name}</Text>
+              {item.badgeNumber ? (
+                <Text style={styles.badgeNumber}>Badge {item.badgeNumber}</Text>
+              ) : null}
             </View>
-            <View style={styles.personMeta}>
-              <View style={styles.nameRow}>
-                <Text style={styles.personName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={[styles.roleBadge, { backgroundColor: badgeColor + "18" }]}>
-                  <Text style={[styles.roleText, { color: badgeColor }]}>
-                    {roleLabel(item.role)}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.locationRow}>
-                <Feather name="map-pin" size={11} color={Colors.light.textSecondary} />
-                <Text style={styles.locationText} numberOfLines={1}>
-                  {zoneName}{locName ? ` › ${locName}` : ""}
-                </Text>
-              </View>
+            <View style={[styles.roleBadge, { backgroundColor: badgeColor + "18" }]}>
+              <Text style={[styles.roleText, { color: badgeColor }]}>{roleLabel(item.role)}</Text>
             </View>
           </View>
 
-          {data?.hasActiveEmergency ? (
-            <View style={styles.receiptRow}>
-              {item.receiptStatus === "confirmed" ? (
-                <>
-                  <View style={[styles.statusDot, { backgroundColor: Colors.light.success }]} />
-                  <Text style={[styles.receiptText, { color: Colors.light.success }]}>
-                    Confirmed
-                  </Text>
-                  {item.confirmedAt ? (
-                    <Text style={styles.receiptTime}>{formatTime(item.confirmedAt)}</Text>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <View style={[styles.statusDot, { backgroundColor: Colors.light.danger }]} />
-                  <Text style={[styles.receiptText, { color: Colors.light.danger }]}>
-                    Not Confirmed
-                  </Text>
-                </>
-              )}
+          <View style={styles.locationRow}>
+            <Feather name="map-pin" size={12} color={Colors.light.textSecondary} />
+            <Text style={styles.locationText} numberOfLines={1}>{locationStr}</Text>
+          </View>
+
+          {hasEmergency && statusLabel && statusColor && statusIcon ? (
+            <View style={[styles.statusRow, { backgroundColor: statusColor + "0D" }]}>
+              <Feather name={statusIcon} size={14} color={statusColor} />
+              <Text style={[styles.statusLabel, { color: statusColor }]}>{statusLabel}</Text>
+              {item.status === "safe" && item.confirmedAt ? (
+                <Text style={styles.confirmedTime}>Confirmed {formatTime(item.confirmedAt)}</Text>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -211,7 +256,7 @@ export default function UsersMonitorScreen() {
     return (
       <View style={styles.center}>
         <Feather name="alert-circle" size={32} color={Colors.light.textSecondary} />
-        <Text style={styles.errorText}>Could not load user data</Text>
+        <Text style={styles.errorText}>Could not load personnel data</Text>
       </View>
     );
   }
@@ -221,6 +266,13 @@ export default function UsersMonitorScreen() {
   return (
     <View style={styles.container}>
       {data.hasActiveEmergency ? (
+        <View style={styles.emergencyBanner}>
+          <Feather name="alert-triangle" size={14} color="#fff" />
+          <Text style={styles.emergencyText}>EMERGENCY ACTIVE — Personnel Status Monitor</Text>
+        </View>
+      ) : null}
+
+      {data.hasActiveEmergency ? (
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
             <Text style={styles.statNum}>{stats.total}</Text>
@@ -228,13 +280,23 @@ export default function UsersMonitorScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: Colors.light.success }]}>{stats.confirmed}</Text>
-            <Text style={styles.statLbl}>Confirmed</Text>
+            <Text style={[styles.statNum, { color: STATUS_COLORS.safe }]}>{stats.safe}</Text>
+            <Text style={styles.statLbl}>Safe</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: Colors.light.danger }]}>{stats.notConfirmed}</Text>
+            <Text style={[styles.statNum, { color: STATUS_COLORS.pending }]}>{stats.pending}</Text>
             <Text style={styles.statLbl}>Pending</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNum, { color: STATUS_COLORS.need_help }]}>{stats.needHelp}</Text>
+            <Text style={styles.statLbl}>Need Help</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNum, { color: STATUS_COLORS.no_reply }]}>{stats.noReply}</Text>
+            <Text style={styles.statLbl}>No Reply</Text>
           </View>
         </View>
       ) : null}
@@ -243,7 +305,7 @@ export default function UsersMonitorScreen() {
         <Feather name="search" size={16} color={Colors.light.tabIconDefault} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search users..."
+          placeholder="Search name or badge..."
           placeholderTextColor={Colors.light.tabIconDefault}
           value={search}
           onChangeText={setSearch}
@@ -258,47 +320,67 @@ export default function UsersMonitorScreen() {
       </View>
 
       <View style={styles.filtersRow}>
-        <FlatList
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          data={[{ id: null, name: "All Zones" }, ...safeZones]}
-          keyExtractor={(item) => item.id || "all"}
           contentContainerStyle={styles.filterChips}
-          renderItem={({ item }) => {
-            const active = item.id === zoneFilter;
-            return (
-              <Pressable
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setZoneFilter(item.id)}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {item.name}
-                </Text>
-              </Pressable>
-            );
-          }}
-        />
+        >
+          <Pressable
+            style={[styles.chip, zoneFilter === null && styles.chipActive]}
+            onPress={() => setZoneFilter(null)}
+          >
+            <Text style={[styles.chipText, zoneFilter === null && styles.chipTextActive]}>
+              All Zones
+            </Text>
+          </Pressable>
+          {safeZones.map((z) => (
+            <Pressable
+              key={z.id}
+              style={[styles.chip, zoneFilter === z.id && styles.chipActive]}
+              onPress={() => setZoneFilter(z.id)}
+            >
+              <Text style={[styles.chipText, zoneFilter === z.id && styles.chipTextActive]}>
+                {z.name}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
 
       {data.hasActiveEmergency ? (
         <View style={styles.statusFilters}>
-          {(["all", "confirmed", "not_confirmed"] as StatusFilter[]).map((s) => {
-            const active = statusFilter === s;
-            const label = s === "all" ? "All" : s === "confirmed" ? "Confirmed" : "Pending";
-            return (
-              <Pressable
-                key={s}
-                style={[styles.statusChip, active && styles.statusChipActive]}
-                onPress={() => setStatusFilter(s)}
-              >
-                <Text style={[styles.statusChipText, active && styles.statusChipTextActive]}>
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statusChipsRow}
+          >
+            {FILTER_OPTIONS.map((opt) => {
+              const active = statusFilter === opt.key;
+              const dotColor = opt.key !== "all" ? STATUS_COLORS[opt.key] : undefined;
+              return (
+                <Pressable
+                  key={opt.key}
+                  style={[styles.statusChip, active && styles.statusChipActive]}
+                  onPress={() => setStatusFilter(opt.key)}
+                >
+                  {dotColor ? (
+                    <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+                  ) : null}
+                  <Text style={[styles.statusChipText, active && styles.statusChipTextActive]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </View>
       ) : null}
+
+      <View style={styles.resultCount}>
+        <Text style={styles.resultText}>
+          {filteredPeople.length} {filteredPeople.length === 1 ? "person" : "personnel"}
+        </Text>
+      </View>
 
       <FlatList
         data={filteredPeople}
@@ -307,15 +389,14 @@ export default function UsersMonitorScreen() {
         contentContainerStyle={{
           paddingBottom: Platform.OS === "web" ? 84 + 16 : 100,
           paddingHorizontal: 16,
-          paddingTop: 8,
         }}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Feather name="users" size={28} color={Colors.light.tabIconDefault} />
             <Text style={styles.emptyText}>
               {search || zoneFilter || statusFilter !== "all"
-                ? "No users match filters"
-                : "No users found"}
+                ? "No personnel match filters"
+                : "No personnel found"}
             </Text>
           </View>
         }
@@ -340,12 +421,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.light.textSecondary,
   },
+  emergencyBanner: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+    backgroundColor: Colors.light.danger,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  emergencyText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: "#fff",
+    letterSpacing: 0.5,
+  },
   statsBar: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     backgroundColor: Colors.light.surface,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
   },
@@ -360,9 +456,11 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
   },
   statLbl: {
-    fontSize: 11,
-    fontWeight: "500" as const,
+    fontSize: 10,
+    fontWeight: "600" as const,
     color: Colors.light.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
   },
   statDivider: {
     width: 1,
@@ -417,13 +515,17 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   statusFilters: {
-    flexDirection: "row" as const,
-    paddingHorizontal: 16,
-    gap: 8,
     paddingBottom: 6,
   },
+  statusChipsRow: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
   statusChip: {
-    paddingHorizontal: 14,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 5,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.light.surface,
@@ -434,6 +536,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.tint,
     borderColor: Colors.light.tint,
   },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   statusChipText: {
     fontSize: 12,
     fontWeight: "600" as const,
@@ -442,6 +549,15 @@ const styles = StyleSheet.create({
   statusChipTextActive: {
     color: "#fff",
   },
+  resultCount: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  resultText: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    fontWeight: "500" as const,
+  },
   personCard: {
     backgroundColor: Colors.light.surface,
     borderRadius: 10,
@@ -449,45 +565,31 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: Colors.light.border,
+  },
+  cardHeader: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    justifyContent: "space-between" as const,
     gap: 8,
   },
-  personTop: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 12,
-  },
-  personAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.light.tint + "18",
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  personInitial: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.light.tint,
-  },
-  personMeta: {
+  nameSection: {
     flex: 1,
-    gap: 3,
-  },
-  nameRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
+    gap: 2,
   },
   personName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600" as const,
     color: Colors.light.text,
-    flexShrink: 1,
+  },
+  badgeNumber: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    color: Colors.light.textSecondary,
   },
   roleBadge: {
     borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   roleText: {
     fontSize: 11,
@@ -497,30 +599,27 @@ const styles = StyleSheet.create({
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 4,
+    marginTop: 6,
   },
   locationText: {
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.light.textSecondary,
     flexShrink: 1,
   },
-  receiptRow: {
+  statusRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 6,
-    paddingTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.light.border,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  receiptText: {
+  statusLabel: {
     fontSize: 13,
-    fontWeight: "600" as const,
+    fontWeight: "700" as const,
   },
-  receiptTime: {
+  confirmedTime: {
     fontSize: 12,
     color: Colors.light.textSecondary,
     marginLeft: "auto" as any,

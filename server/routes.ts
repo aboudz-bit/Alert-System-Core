@@ -557,6 +557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         name: u.name,
         username: u.username,
         role: u.role,
+        badgeNumber: u.badgeNumber || null,
         zoneId: u.zoneId || null,
         locationId: u.locationId || null,
         receiptStatus: activeEmergency ? (receiptMap[u.id] ? "confirmed" : "not_confirmed") : null,
@@ -568,6 +569,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         zones: allZones.map((z) => ({ id: z.id, name: z.name })),
         locations: allLocations.map((l) => ({ id: l.id, name: l.name, zoneId: l.zoneId })),
         hasActiveEmergency: !!activeEmergency,
+        emergencyActivatedAt: activeEmergency?.activatedAt
+          ? new Date(activeEmergency.activatedAt).toISOString()
+          : null,
       });
     } catch (error) {
       console.error("Get people error:", error);
