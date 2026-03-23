@@ -7,11 +7,19 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
+
+const DEMO_ACCOUNTS: { label: string; icon: keyof typeof Feather.glyphMap; username: string; password: string; color: string }[] = [
+  { label: "Super Admin", icon: "shield", username: "admin", password: "admin123", color: "#FF3B30" },
+  { label: "ECO", icon: "radio", username: "eco1", password: "eco123", color: "#FF9500" },
+  { label: "Supervisor", icon: "eye", username: "supervisor1", password: "super123", color: "#5856D6" },
+  { label: "User", icon: "user", username: "user1", password: "user123", color: "#34C759" },
+];
 
 export default function LoginScreen() {
   const [username, setUsername] = useState("");
@@ -37,8 +45,18 @@ export default function LoginScreen() {
     }
   };
 
+  const fillDemo = (user: string, pass: string) => {
+    setUsername(user);
+    setPassword(pass);
+    setError("");
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: topPadding + 40 }]}>
+    <ScrollView
+      style={styles.scrollContainer}
+      contentContainerStyle={[styles.container, { paddingTop: topPadding + 40, paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 20 }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <View style={styles.iconContainer}>
           <Feather name="shield" size={40} color={Colors.light.tint} />
@@ -99,14 +117,38 @@ export default function LoginScreen() {
           )}
         </Pressable>
       </View>
-    </View>
+
+      <View style={styles.demoSection}>
+        <Text style={styles.demoTitle}>Quick Demo Access</Text>
+        <View style={styles.demoGrid}>
+          {DEMO_ACCOUNTS.map((acct) => (
+            <Pressable
+              key={acct.username}
+              style={({ pressed }) => [
+                styles.demoButton,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={() => fillDemo(acct.username, acct.password)}
+            >
+              <View style={[styles.demoIcon, { backgroundColor: acct.color + "18" }]}>
+                <Feather name={acct.icon} size={16} color={acct.color} />
+              </View>
+              <Text style={styles.demoLabel}>{acct.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollContainer: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  container: {
+    flexGrow: 1,
     paddingHorizontal: 24,
   },
   header: {
@@ -187,5 +229,46 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600" as const,
+  },
+  demoSection: {
+    marginTop: 32,
+    gap: 12,
+  },
+  demoTitle: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.light.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    textAlign: "center" as const,
+  },
+  demoGrid: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 10,
+    justifyContent: "center" as const,
+  },
+  demoButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    backgroundColor: Colors.light.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  demoIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  demoLabel: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.light.text,
   },
 });
