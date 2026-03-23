@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema } from "@shared/schema";
+import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema, updateUserAssignmentSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 const PgSession = connectPgSimple(session);
@@ -479,6 +479,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json(wind);
     } catch (error) {
       console.error("Update wind error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/users/:id/assignment", requireRole("admin"), async (req: Request, res: Response) => {
+    try {
+      const parsed = updateUserAssignmentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid assignment data", errors: parsed.error.errors });
+      }
+
+      const { zoneId, locationId } = parsed.data;
+
+      if (locationId && !zoneId) {
+        return res.status(400).json({ message: "Cannot assign location without a zone" });
+      }
+
+      if (zoneId) {
+        const zone = await storage.getZone(zoneId);
+        if (!zone) {
+          return res.status(400).json({ message: "Zone not found" });
+        }
+      }
+
+      if (locationId) {
+        const location = await storage.getLocation(locationId);
+        if (!location) {
+          return res.status(400).json({ message: "Location not found" });
+        }
+        if (location.zoneId !== zoneId) {
+          return res.status(400).json({ message: "Location does not belong to selected zone" });
+        }
+      }
+
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const updated = await storage.updateUserAssignment(req.params.id, zoneId, locationId);
+      if (!updated) {
+        return res.status(500).json({ message: "Failed to update assignment" });
+      }
+
+      return res.json({
+        id: updated.id,
+        name: updated.name,
+        username: updated.username,
+        role: updated.role,
+        zoneId: updated.zoneId,
+        locationId: updated.locationId,
+      });
+    } catch (error) {
+      console.error("Update user assignment error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   StyleSheet,
   View,
@@ -6,12 +6,14 @@ import {
   SectionList,
   ActivityIndicator,
   Platform,
+  Pressable,
+  Alert,
 } from "react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import { getQueryFn } from "@/lib/query-client";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getQueryFn, apiRequest, queryClient } from "@/lib/query-client";
+import { useAuth } from "@/lib/auth-context";
 
 interface PersonEntry {
   id: string;
@@ -68,8 +70,168 @@ function roleLabel(role: string): string {
   }
 }
 
+function AssignmentPanel({
+  person,
+  zones,
+  locations,
+  onClose,
+}: {
+  person: PersonEntry;
+  zones: ZoneRef[];
+  locations: LocationRef[];
+  onClose: () => void;
+}) {
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(person.zoneId);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(person.locationId);
+  const [saving, setSaving] = useState(false);
+
+  const filteredLocations = useMemo(() => {
+    if (!selectedZoneId) return [];
+    return (locations || []).filter((l) => l.zoneId === selectedZoneId);
+  }, [selectedZoneId, locations]);
+
+  const handleZoneSelect = useCallback((zoneId: string | null) => {
+    setSelectedZoneId(zoneId);
+    setSelectedLocationId(null);
+  }, []);
+
+  const hasChanges =
+    selectedZoneId !== person.zoneId || selectedLocationId !== person.locationId;
+
+  const handleSave = useCallback(async () => {
+    if (!hasChanges || saving) return;
+    setSaving(true);
+    try {
+      await apiRequest("PATCH", `/api/users/${person.id}/assignment`, {
+        zoneId: selectedZoneId,
+        locationId: selectedLocationId,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to save";
+      Alert.alert("Error", msg);
+    } finally {
+      setSaving(false);
+    }
+  }, [hasChanges, saving, person.id, selectedZoneId, selectedLocationId, onClose]);
+
+  const handleClear = useCallback(async () => {
+    if (saving) return;
+    if (!person.zoneId && !person.locationId) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiRequest("PATCH", `/api/users/${person.id}/assignment`, {
+        zoneId: null,
+        locationId: null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to clear";
+      Alert.alert("Error", msg);
+    } finally {
+      setSaving(false);
+    }
+  }, [saving, person.id, person.zoneId, person.locationId, onClose]);
+
+  const safeZones = zones || [];
+
+  return (
+    <View style={styles.assignPanel}>
+      <View style={styles.assignHeader}>
+        <Text style={styles.assignTitle}>Assign {person.name}</Text>
+        <Pressable onPress={onClose} hitSlop={8}>
+          <Feather name="x" size={18} color={Colors.light.textSecondary} />
+        </Pressable>
+      </View>
+
+      <Text style={styles.assignLabel}>Zone</Text>
+      <View style={styles.optionList}>
+        <Pressable
+          style={[styles.optionChip, !selectedZoneId && styles.optionChipActive]}
+          onPress={() => handleZoneSelect(null)}
+        >
+          <Text style={[styles.optionText, !selectedZoneId && styles.optionTextActive]}>
+            None
+          </Text>
+        </Pressable>
+        {safeZones.map((z) => (
+          <Pressable
+            key={z.id}
+            style={[styles.optionChip, selectedZoneId === z.id && styles.optionChipActive]}
+            onPress={() => handleZoneSelect(z.id)}
+          >
+            <Text style={[styles.optionText, selectedZoneId === z.id && styles.optionTextActive]}>
+              {z.name}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {selectedZoneId ? (
+        <>
+          <Text style={styles.assignLabel}>Location</Text>
+          <View style={styles.optionList}>
+            <Pressable
+              style={[styles.optionChip, !selectedLocationId && styles.optionChipActive]}
+              onPress={() => setSelectedLocationId(null)}
+            >
+              <Text style={[styles.optionText, !selectedLocationId && styles.optionTextActive]}>
+                None
+              </Text>
+            </Pressable>
+            {filteredLocations.map((l) => (
+              <Pressable
+                key={l.id}
+                style={[styles.optionChip, selectedLocationId === l.id && styles.optionChipActive]}
+                onPress={() => setSelectedLocationId(l.id)}
+              >
+                <Text style={[styles.optionText, selectedLocationId === l.id && styles.optionTextActive]}>
+                  {l.name}
+                </Text>
+              </Pressable>
+            ))}
+            {filteredLocations.length === 0 ? (
+              <Text style={styles.noLocText}>No locations in this zone</Text>
+            ) : null}
+          </View>
+        </>
+      ) : null}
+
+      <View style={styles.assignActions}>
+        {(person.zoneId || person.locationId) ? (
+          <Pressable
+            style={[styles.clearBtn, saving && styles.btnDisabled]}
+            onPress={handleClear}
+            disabled={saving}
+          >
+            <Text style={styles.clearBtnText}>Clear Assignment</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          style={[styles.saveBtn, (!hasChanges || saving) && styles.btnDisabled]}
+          onPress={handleSave}
+          disabled={!hasChanges || saving}
+        >
+          {saving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.saveBtnText}>Save</Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function PeopleScreen() {
-  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<PeopleResponse>({
     queryKey: ["/api/people"],
@@ -91,14 +253,6 @@ export default function PeopleScreen() {
     const locationMap = new Map<string, LocationRef>();
     for (const l of locations) {
       locationMap.set(l.id, l);
-    }
-
-    const locationsByZone = new Map<string, LocationRef[]>();
-    for (const l of locations) {
-      const zId = l.zoneId || "_unassigned";
-      const arr = locationsByZone.get(zId) || [];
-      arr.push(l);
-      locationsByZone.set(zId, arr);
     }
 
     const grouped = new Map<string, PersonEntry[]>();
@@ -124,8 +278,8 @@ export default function PeopleScreen() {
     }
 
     const result: GroupedSection[] = [];
-    for (const [title, data] of grouped) {
-      result.push({ title, data });
+    for (const [title, sectionData] of grouped) {
+      result.push({ title, data: sectionData });
     }
 
     result.sort((a, b) => {
@@ -136,6 +290,10 @@ export default function PeopleScreen() {
 
     return result;
   }, [data]);
+
+  const handleCloseAssign = useCallback(() => {
+    setEditingPersonId(null);
+  }, []);
 
   if (isLoading) {
     return (
@@ -166,6 +324,9 @@ export default function PeopleScreen() {
     );
   }
 
+  const safeZones = data.zones || [];
+  const safeLocations = data.locations || [];
+
   return (
     <View style={styles.container}>
       {hasEmergency ? (
@@ -193,37 +354,60 @@ export default function PeopleScreen() {
             </View>
           </View>
         )}
-        renderItem={({ item }) => (
-          <View style={styles.personRow}>
-            <View style={styles.personInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.personName}>{item.name}</Text>
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleText}>{roleLabel(item.role)}</Text>
+        renderItem={({ item }) => {
+          const isEditing = editingPersonId === item.id;
+          return (
+            <View>
+              <Pressable
+                style={[styles.personRow, isAdmin && styles.personRowTappable]}
+                onPress={isAdmin ? () => setEditingPersonId(isEditing ? null : item.id) : undefined}
+              >
+                <View style={styles.personInfo}>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.personName}>{item.name}</Text>
+                    <View style={styles.roleBadge}>
+                      <Text style={styles.roleText}>{roleLabel(item.role)}</Text>
+                    </View>
+                    {isAdmin ? (
+                      <Feather
+                        name={isEditing ? "chevron-up" : "chevron-down"}
+                        size={14}
+                        color={Colors.light.textSecondary}
+                      />
+                    ) : null}
+                  </View>
+                  {hasEmergency ? (
+                    <View style={styles.receiptRow}>
+                      {item.receiptStatus === "confirmed" ? (
+                        <>
+                          <Feather name="check-circle" size={13} color={Colors.light.success} />
+                          <Text style={[styles.receiptText, { color: Colors.light.success }]}>
+                            Confirmed{item.confirmedAt ? ` at ${formatTime(item.confirmedAt)}` : ""}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Feather name="x-circle" size={13} color={Colors.light.danger} />
+                          <Text style={[styles.receiptText, { color: Colors.light.danger }]}>
+                            Not Confirmed
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  ) : null}
                 </View>
-              </View>
-              {hasEmergency ? (
-                <View style={styles.receiptRow}>
-                  {item.receiptStatus === "confirmed" ? (
-                    <>
-                      <Feather name="check-circle" size={13} color={Colors.light.success} />
-                      <Text style={[styles.receiptText, { color: Colors.light.success }]}>
-                        Confirmed{item.confirmedAt ? ` at ${formatTime(item.confirmedAt)}` : ""}
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Feather name="x-circle" size={13} color={Colors.light.danger} />
-                      <Text style={[styles.receiptText, { color: Colors.light.danger }]}>
-                        Not Confirmed
-                      </Text>
-                    </>
-                  )}
-                </View>
+              </Pressable>
+              {isAdmin && isEditing ? (
+                <AssignmentPanel
+                  person={item}
+                  zones={safeZones}
+                  locations={safeLocations}
+                  onClose={handleCloseAssign}
+                />
               ) : null}
             </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.center}>
             <Text style={styles.errorText}>No personnel data available</Text>
@@ -306,6 +490,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.light.border,
   },
+  personRowTappable: {
+    cursor: "pointer" as any,
+  },
   personInfo: {
     flex: 1,
     gap: 4,
@@ -340,5 +527,96 @@ const styles = StyleSheet.create({
   receiptText: {
     fontSize: 12,
     fontWeight: "500" as const,
+  },
+  assignPanel: {
+    backgroundColor: Colors.light.background,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+  },
+  assignHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    marginBottom: 10,
+  },
+  assignTitle: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: Colors.light.text,
+  },
+  assignLabel: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.light.textSecondary,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  optionList: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 8,
+    marginBottom: 10,
+  },
+  optionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: Colors.light.surface,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  optionChipActive: {
+    backgroundColor: Colors.light.tint,
+    borderColor: Colors.light.tint,
+  },
+  optionText: {
+    fontSize: 13,
+    fontWeight: "500" as const,
+    color: Colors.light.text,
+  },
+  optionTextActive: {
+    color: "#fff",
+  },
+  noLocText: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    fontStyle: "italic" as const,
+  },
+  assignActions: {
+    flexDirection: "row" as const,
+    justifyContent: "flex-end" as const,
+    gap: 10,
+    marginTop: 6,
+  },
+  saveBtn: {
+    backgroundColor: Colors.light.tint,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 64,
+    alignItems: "center" as const,
+  },
+  saveBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600" as const,
+  },
+  clearBtn: {
+    backgroundColor: Colors.light.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.light.danger,
+  },
+  clearBtnText: {
+    color: Colors.light.danger,
+    fontSize: 13,
+    fontWeight: "500" as const,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
 });

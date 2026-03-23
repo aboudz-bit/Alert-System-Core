@@ -27,6 +27,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserAssignment(id: string, zoneId: string | null, locationId: string | null): Promise<User | undefined>;
 
   getZones(): Promise<Zone[]>;
   getZone(id: string): Promise<Zone | undefined>;
@@ -77,6 +78,15 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     const result = await db.insert(users).values(user).returning();
+    return result[0];
+  }
+
+  async updateUserAssignment(id: string, zoneId: string | null, locationId: string | null): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({ zoneId, locationId })
+      .where(eq(users.id, id))
+      .returning();
     return result[0];
   }
 

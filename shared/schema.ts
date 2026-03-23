@@ -133,6 +133,11 @@ export const activateEmergencySchema = z.object({
   type: z.enum(["shelter_in", "blackout"]),
 });
 
+export const updateUserAssignmentSchema = z.object({
+  zoneId: z.string().nullable(),
+  locationId: z.string().nullable(),
+});
+
 export const updateWindSchema = z.object({
   direction: z.number().min(0).max(360),
   speed: z.number().min(0).max(300),

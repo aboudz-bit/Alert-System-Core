@@ -95,6 +95,7 @@ shared/
 - `GET /api/emergency/:id/receipts/summary` - Get receipt summary with confirmed/not confirmed users (admin/eco/supervisor)
 - `GET /api/wind` - Get current wind conditions (all authenticated)
 - `POST /api/wind` - Update wind direction/speed (admin/eco/supervisor)
+- `PATCH /api/users/:id/assignment` - Assign user to zone/location (admin only)
 - `GET /api/people` - Get all users grouped with zone/location/receipt data (admin/eco/supervisor)
 
 ## Seed Users
