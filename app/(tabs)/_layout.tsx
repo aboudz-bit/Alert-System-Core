@@ -14,26 +14,37 @@ type TabConfig = {
   icon: keyof typeof Feather.glyphMap;
 };
 
-const ALL_TABS: TabConfig[] = [
-  { name: "index", title: "Map", icon: "map" },
+const MAIN_TABS: TabConfig[] = [
+  { name: "dashboard", title: "Dashboard", icon: "home" },
+  { name: "alerts", title: "Alert", icon: "alert-triangle" },
+  { name: "users", title: "Users", icon: "users" },
+  { name: "index", title: "Zone Map", icon: "map" },
+  { name: "more", title: "More", icon: "more-horizontal" },
+];
+
+const HIDDEN_TABS: TabConfig[] = [
+  { name: "people", title: "People", icon: "users" },
   { name: "zones", title: "Zones", icon: "layers" },
   { name: "locations", title: "Locations", icon: "map-pin" },
-  { name: "alerts", title: "Alerts", icon: "alert-triangle" },
-  { name: "people", title: "People", icon: "users" },
+  { name: "permissions", title: "Permissions", icon: "shield" },
+  { name: "eco", title: "ECO", icon: "radio" },
+  { name: "supervisor", title: "Supervisor", icon: "eye" },
   { name: "settings", title: "Settings", icon: "settings" },
 ];
 
-function getVisibleTabs(role: UserRole): string[] {
+const ALL_TABS = [...MAIN_TABS, ...HIDDEN_TABS];
+
+function getVisibleMainTabs(role: UserRole): string[] {
   switch (role) {
     case "admin":
-      return ["index", "zones", "locations", "alerts", "people", "settings"];
+      return ["dashboard", "alerts", "users", "index", "more"];
     case "supervisor":
-      return ["index", "zones", "alerts", "people", "settings"];
+      return ["dashboard", "alerts", "users", "index", "more"];
     case "eco":
-      return ["index", "alerts", "people", "settings"];
+      return ["dashboard", "alerts", "users", "index", "more"];
     case "user":
     default:
-      return ["index", "alerts", "settings"];
+      return ["dashboard", "alerts", "index", "more"];
   }
 }
 
@@ -42,7 +53,7 @@ export default function TabLayout() {
   const isDark = colorScheme === "dark";
   const { user } = useAuth();
   const role: UserRole = user?.role || "user";
-  const visibleTabs = getVisibleTabs(role);
+  const visibleMainTabs = getVisibleMainTabs(role);
 
   useEmergencyAlarm();
 
@@ -73,19 +84,24 @@ export default function TabLayout() {
           ) : null,
       }}
     >
-      {ALL_TABS.map((tab) => (
-        <Tabs.Screen
-          key={tab.name}
-          name={tab.name}
-          options={{
-            title: tab.title,
-            href: visibleTabs.includes(tab.name) ? undefined : null,
-            tabBarIcon: ({ color }) => (
-              <Feather name={tab.icon} size={22} color={color} />
-            ),
-          }}
-        />
-      ))}
+      {ALL_TABS.map((tab) => {
+        const isMainTab = MAIN_TABS.some((t) => t.name === tab.name);
+        const isVisible = isMainTab && visibleMainTabs.includes(tab.name);
+
+        return (
+          <Tabs.Screen
+            key={tab.name}
+            name={tab.name}
+            options={{
+              title: tab.title,
+              href: isVisible ? undefined : null,
+              tabBarIcon: ({ color }) => (
+                <Feather name={tab.icon} size={22} color={color} />
+              ),
+            }}
+          />
+        );
+      })}
     </Tabs>
   );
 }

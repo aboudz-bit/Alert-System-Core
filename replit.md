@@ -67,12 +67,15 @@ shared/
 
 ## Roles
 
-| Role       | Tabs                                   | Can Create Alerts | Can Activate Emergency |
-|------------|----------------------------------------|-------------------|----------------------|
-| Admin      | Map, Zones, Locations, Alerts, People, Settings | Yes              | Yes                  |
-| Supervisor | Map, Zones, Alerts, People, Settings   | Yes               | Yes                  |
-| ECO        | Map, Alerts, People, Settings          | Yes               | Yes                  |
-| User       | Map, Alerts, Settings                  | No (read-only)    | No (view only)       |
+| Role       | Main Tabs                                       | Can Create Alerts | Can Activate Emergency |
+|------------|------------------------------------------------|-------------------|----------------------|
+| Admin      | Dashboard, Alert, Users, Zone Map, More         | Yes              | Yes                  |
+| Supervisor | Dashboard, Alert, Users, Zone Map, More         | Yes               | Yes                  |
+| ECO        | Dashboard, Alert, Users, Zone Map, More         | Yes               | Yes                  |
+| User       | Dashboard, Alert, Zone Map, More                | No (read-only)    | No (view only)       |
+
+### More Menu (sub-pages)
+People, Zones, Locations, Permissions, ECO, Supervisor, Settings — visibility filtered by role
 
 ## API Routes
 
