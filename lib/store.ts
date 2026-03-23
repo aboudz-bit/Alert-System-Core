@@ -30,14 +30,18 @@ interface AppState {
   setWindData: (wind: WindData | null) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   zones: [],
   locations: [],
   alerts: [],
   emergencyMode: null,
   windData: null,
 
-  setZones: (zones) => set({ zones: Array.isArray(zones) ? zones : [] }),
+  setZones: (zones) => {
+    const arr = Array.isArray(zones) ? zones : [];
+    if (arr === get().zones) return;
+    set({ zones: arr });
+  },
   addZone: (zone) =>
     set((state) => ({ zones: [...(state.zones || []), zone] })),
   updateZone: (id, updates) =>
@@ -51,8 +55,11 @@ export const useAppStore = create<AppState>((set) => ({
       zones: (state.zones || []).filter((z) => z.id !== id),
     })),
 
-  setLocations: (locations) =>
-    set({ locations: Array.isArray(locations) ? locations : [] }),
+  setLocations: (locations) => {
+    const arr = Array.isArray(locations) ? locations : [];
+    if (arr === get().locations) return;
+    set({ locations: arr });
+  },
   addLocation: (location) =>
     set((state) => ({
       locations: [...(state.locations || []), location],
@@ -62,8 +69,11 @@ export const useAppStore = create<AppState>((set) => ({
       locations: (state.locations || []).filter((l) => l.id !== id),
     })),
 
-  setAlerts: (alerts) =>
-    set({ alerts: Array.isArray(alerts) ? alerts : [] }),
+  setAlerts: (alerts) => {
+    const arr = Array.isArray(alerts) ? alerts : [];
+    if (arr === get().alerts) return;
+    set({ alerts: arr });
+  },
   addAlert: (alert) =>
     set((state) => ({ alerts: [...(state.alerts || []), alert] })),
   updateAlert: (id, updates) =>
@@ -73,8 +83,15 @@ export const useAppStore = create<AppState>((set) => ({
       ),
     })),
 
-  setEmergencyMode: (mode) => set({ emergencyMode: mode || null }),
+  setEmergencyMode: (mode) => {
+    const resolved = mode || null;
+    const current = get().emergencyMode;
+    if (resolved === null && current === null) return;
+    if (resolved && current && resolved.id === current.id && resolved.status === current.status) return;
+    set({ emergencyMode: resolved });
+  },
   setWindData: (wind) => {
+    const current = get().windData;
     if (
       wind &&
       typeof wind.direction === "number" &&
@@ -88,8 +105,10 @@ export const useAppStore = create<AppState>((set) => ({
       wind.speed >= 0 &&
       wind.speed <= 300
     ) {
+      if (current && current.direction === wind.direction && current.speed === wind.speed) return;
       set({ windData: { direction: wind.direction, speed: wind.speed } });
     } else {
+      if (current === null) return;
       set({ windData: null });
     }
   },

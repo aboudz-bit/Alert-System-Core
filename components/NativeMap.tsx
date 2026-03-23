@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import MapView, { Polygon, Marker } from "react-native-maps";
 import type { Zone, Location, Alert } from "@shared/schema";
 import type { WindData } from "@/lib/store";
@@ -10,6 +10,8 @@ interface NativeMapProps {
   alertZoneIds?: Set<string>;
   windData?: WindData | null;
 }
+
+const EMPTY_SET = new Set<string>();
 
 function isValidPolygon(polygon: unknown): polygon is Array<{ latitude: number; longitude: number }> {
   if (!Array.isArray(polygon)) return false;
@@ -94,14 +96,18 @@ function computeHazardCone(
   return points;
 }
 
-export default function NativeMap({ zones, locations, activeAlerts, alertZoneIds, windData }: NativeMapProps) {
-  const safeZones = (zones || []).filter((z) => z && isValidPolygon(z.polygon));
-  const safeLocations = (locations || []).filter(
-    (l) => l && isValidCoord(l.latitude, l.longitude)
+function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData }: NativeMapProps) {
+  const safeZones = useMemo(
+    () => (zones || []).filter((z) => z && isValidPolygon(z.polygon)),
+    [zones]
   );
-  const safeAlertZoneIds = alertZoneIds || new Set<string>();
+  const safeLocations = useMemo(
+    () => (locations || []).filter((l) => l && isValidCoord(l.latitude, l.longitude)),
+    [locations]
+  );
+  const safeAlertZoneIds = alertZoneIds || EMPTY_SET;
 
-  const hazardCones = React.useMemo(() => {
+  const hazardCones = useMemo(() => {
     if (!windData || windData.speed <= 0) return [];
     const cones: Array<{ id: string; polygon: Array<{ latitude: number; longitude: number }> }> = [];
 
@@ -165,3 +171,22 @@ export default function NativeMap({ zones, locations, activeAlerts, alertZoneIds
     </MapView>
   );
 }
+
+function windDataEqual(a?: WindData | null, b?: WindData | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.direction === b.direction && a.speed === b.speed;
+}
+
+function propsAreEqual(prev: NativeMapProps, next: NativeMapProps): boolean {
+  return (
+    prev.zones === next.zones &&
+    prev.locations === next.locations &&
+    prev.activeAlerts === next.activeAlerts &&
+    prev.alertZoneIds === next.alertZoneIds &&
+    windDataEqual(prev.windData, next.windData)
+  );
+}
+
+const NativeMap = React.memo(NativeMapInner, propsAreEqual);
+export default NativeMap;
