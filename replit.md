@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 (Shelter In / Blackout)
+# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-4)
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Step 1 adds Shelter In Place / Blackout emergency mode activation and clearing. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-4: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, and receipt confirmation system. Stability is the top priority.
 
 ## Stack
 
@@ -59,6 +59,7 @@ shared/
 - **locations**: id, name, latitude, longitude, zoneId (FK zones)
 - **alerts**: id, title, description, severity, status, zoneId (FK zones), createdBy (FK users)
 - **emergency_modes**: id, type (shelter_in/blackout), status (active/cleared), activatedBy (FK users), activatedAt, clearedAt, clearedBy (FK users)
+- **emergency_receipts**: id, emergencyModeId (FK emergency_modes), userId (FK users), confirmedAt (unique per mode+user)
 
 ## Roles
 
@@ -84,6 +85,10 @@ shared/
 - `GET /api/emergency/history` - Get all emergency modes history (all authenticated)
 - `POST /api/emergency/activate` - Activate shelter_in or blackout (admin/eco/supervisor)
 - `PATCH /api/emergency/:id/clear` - Clear active emergency mode (admin/eco/supervisor)
+- `POST /api/emergency/:id/receipt` - Confirm receipt of emergency (all authenticated)
+- `GET /api/emergency/:id/receipt/me` - Get current user's receipt (all authenticated)
+- `GET /api/emergency/:id/receipts` - Get all receipts for emergency (admin/eco/supervisor)
+- `GET /api/emergency/:id/receipts/summary` - Get receipt summary with confirmed/not confirmed users (admin/eco/supervisor)
 
 ## Seed Users
 

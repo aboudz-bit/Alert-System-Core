@@ -388,6 +388,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/emergency/:id/receipt", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const receipt = await storage.confirmReceipt(req.params.id, userId);
+      return res.status(201).json(receipt);
+    } catch (error) {
+      console.error("Confirm receipt error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/emergency/:id/receipt/me", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const receipt = await storage.getUserReceipt(req.params.id, userId);
+      return res.json(receipt || null);
+    } catch (error) {
+      console.error("Get user receipt error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/emergency/:id/receipts", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const receipts = await storage.getReceiptsByMode(req.params.id);
+      return res.json(receipts);
+    } catch (error) {
+      console.error("Get receipts error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/emergency/:id/receipts/summary", requireRole("admin", "eco", "supervisor"), async (req: Request, res: Response) => {
+    try {
+      const allUsers = await storage.getUsers();
+      const receipts = await storage.getReceiptsByMode(req.params.id);
+      const confirmedIds = new Set(receipts.map((r) => r.userId));
+      const confirmed = allUsers
+        .filter((u) => confirmedIds.has(u.id))
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          role: u.role,
+          confirmedAt: receipts.find((r) => r.userId === u.id)?.confirmedAt || null,
+        }));
+      const notConfirmed = allUsers
+        .filter((u) => !confirmedIds.has(u.id))
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          role: u.role,
+        }));
+      return res.json({ confirmed, notConfirmed, total: allUsers.length });
+    } catch (error) {
+      console.error("Get receipts summary error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

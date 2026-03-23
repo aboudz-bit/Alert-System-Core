@@ -14,7 +14,21 @@ import Colors from "@/constants/colors";
 import { useAppStore, selectEmergencyMode } from "@/lib/store";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
-import type { EmergencyMode, EmergencyModeType } from "@shared/schema";
+import type { EmergencyMode, EmergencyModeType, EmergencyReceipt } from "@shared/schema";
+
+type ReceiptUser = {
+  id: string;
+  name: string;
+  username: string;
+  role: string;
+  confirmedAt?: string | null;
+};
+
+type ReceiptSummary = {
+  confirmed: ReceiptUser[];
+  notConfirmed: ReceiptUser[];
+  total: number;
+};
 
 function getModeLabel(type: EmergencyModeType): string {
   switch (type) {
@@ -47,6 +61,166 @@ function getModeColor(type: EmergencyModeType): string {
     default:
       return Colors.light.danger;
   }
+}
+
+function ReceiptConfirmation({ emergencyModeId }: { emergencyModeId: string }) {
+  const { data: myReceipt, isLoading } = useQuery<EmergencyReceipt | null>({
+    queryKey: ["/api/emergency", emergencyModeId, "receipt", "me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    refetchInterval: 10000,
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/emergency/${emergencyModeId}/receipt`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/emergency", emergencyModeId, "receipt", "me"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/emergency", emergencyModeId, "receipts", "summary"],
+      });
+    },
+    onError: () => {
+      const msg = "Failed to confirm receipt. Please try again.";
+      if (Platform.OS === "web") {
+        alert(msg);
+      } else {
+        RNAlert.alert("Error", msg);
+      }
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <View style={styles.receiptRow}>
+        <ActivityIndicator size="small" color={Colors.light.tint} />
+      </View>
+    );
+  }
+
+  if (myReceipt) {
+    return (
+      <View style={styles.receiptConfirmed}>
+        <Feather name="check-circle" size={16} color={Colors.light.success} />
+        <Text style={styles.receiptConfirmedText}>
+          Receipt confirmed at{" "}
+          {new Date(myReceipt.confirmedAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.receiptButton,
+        pressed && { opacity: 0.85 },
+        confirmMutation.isPending && { opacity: 0.5 },
+      ]}
+      onPress={() => confirmMutation.mutate()}
+      disabled={confirmMutation.isPending}
+    >
+      {confirmMutation.isPending ? (
+        <ActivityIndicator size="small" color="#fff" />
+      ) : (
+        <>
+          <Feather name="check" size={18} color="#fff" />
+          <Text style={styles.receiptButtonText}>Confirm Receipt</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+function ReceiptSummaryView({ emergencyModeId }: { emergencyModeId: string }) {
+  const [expanded, setExpanded] = React.useState(false);
+
+  const { data: summary, isLoading } = useQuery<ReceiptSummary>({
+    queryKey: ["/api/emergency", emergencyModeId, "receipts", "summary"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    refetchInterval: 10000,
+  });
+
+  if (isLoading || !summary) {
+    return null;
+  }
+
+  const confirmedCount = (summary.confirmed || []).length;
+  const totalCount = summary.total || 0;
+
+  return (
+    <View style={styles.summaryContainer}>
+      <Pressable
+        style={styles.summaryHeader}
+        onPress={() => setExpanded(!expanded)}
+      >
+        <View style={styles.summaryCountRow}>
+          <Text style={styles.summaryLabel}>Receipts</Text>
+          <Text style={styles.summaryCount}>
+            {confirmedCount}/{totalCount}
+          </Text>
+        </View>
+        <View style={styles.summaryBar}>
+          <View
+            style={[
+              styles.summaryBarFill,
+              {
+                width: totalCount > 0 ? `${(confirmedCount / totalCount) * 100}%` : "0%",
+              },
+            ]}
+          />
+        </View>
+        <Feather
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={16}
+          color={Colors.light.textSecondary}
+        />
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.summaryDetails}>
+          {(summary.confirmed || []).length > 0 ? (
+            <View style={styles.summaryGroup}>
+              <Text style={styles.summaryGroupLabel}>Confirmed</Text>
+              {(summary.confirmed || []).map((u) => (
+                <View key={u.id} style={styles.summaryUserRow}>
+                  <Feather name="check-circle" size={14} color={Colors.light.success} />
+                  <Text style={styles.summaryUserName}>{u.name}</Text>
+                  <Text style={styles.summaryUserRole}>{u.role}</Text>
+                  {u.confirmedAt ? (
+                    <Text style={styles.summaryUserTime}>
+                      {new Date(u.confirmedAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {(summary.notConfirmed || []).length > 0 ? (
+            <View style={styles.summaryGroup}>
+              <Text style={styles.summaryGroupLabel}>Not Confirmed</Text>
+              {(summary.notConfirmed || []).map((u) => (
+                <View key={u.id} style={styles.summaryUserRow}>
+                  <Feather name="clock" size={14} color={Colors.light.tabIconDefault} />
+                  <Text style={styles.summaryUserName}>{u.name}</Text>
+                  <Text style={styles.summaryUserRole}>{u.role}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 export default function EmergencyPanel() {
@@ -209,6 +383,12 @@ export default function EmergencyPanel() {
             </Pressable>
           ) : null}
         </View>
+        <View style={styles.receiptSection}>
+          <ReceiptConfirmation emergencyModeId={emergencyMode.id} />
+          {canActivate ? (
+            <ReceiptSummaryView emergencyModeId={emergencyMode.id} />
+          ) : null}
+        </View>
       </View>
     );
   }
@@ -363,6 +543,116 @@ const styles = StyleSheet.create({
   },
   normalText: {
     fontSize: 14,
+    color: Colors.light.textSecondary,
+  },
+  receiptSection: {
+    backgroundColor: Colors.light.background,
+    padding: 14,
+    gap: 12,
+  },
+  receiptRow: {
+    alignItems: "center" as const,
+    paddingVertical: 8,
+  },
+  receiptButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+    backgroundColor: Colors.light.tint,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  receiptButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700" as const,
+  },
+  receiptConfirmed: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    backgroundColor: "#E8F5E9",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  receiptConfirmedText: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.light.success,
+  },
+  summaryContainer: {
+    backgroundColor: Colors.light.surface,
+    borderRadius: 10,
+    overflow: "hidden" as const,
+  },
+  summaryHeader: {
+    padding: 12,
+    gap: 8,
+  },
+  summaryCountRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.light.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
+  summaryCount: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: Colors.light.text,
+  },
+  summaryBar: {
+    height: 6,
+    backgroundColor: Colors.light.border,
+    borderRadius: 3,
+    overflow: "hidden" as const,
+  },
+  summaryBarFill: {
+    height: 6,
+    backgroundColor: Colors.light.success,
+    borderRadius: 3,
+  },
+  summaryDetails: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  summaryGroup: {
+    gap: 6,
+  },
+  summaryGroupLabel: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.light.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.4,
+  },
+  summaryUserRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    paddingVertical: 4,
+  },
+  summaryUserName: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.light.text,
+    flex: 1,
+  },
+  summaryUserRole: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    textTransform: "capitalize" as const,
+  },
+  summaryUserTime: {
+    fontSize: 12,
     color: Colors.light.textSecondary,
   },
 });

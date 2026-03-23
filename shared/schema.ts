@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, real, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, real, pgEnum, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -102,6 +102,21 @@ export const insertAlertSchema = createInsertSchema(alerts).pick({
   zoneId: true,
 });
 
+export const emergencyReceipts = pgTable("emergency_receipts", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  emergencyModeId: varchar("emergency_mode_id")
+    .notNull()
+    .references(() => emergencyModes.id),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  confirmedAt: timestamp("confirmed_at").notNull().defaultNow(),
+}, (table) => [
+  unique().on(table.emergencyModeId, table.userId),
+]);
+
 export const activateEmergencySchema = z.object({
   type: z.enum(["shelter_in", "blackout"]),
 });
@@ -115,5 +130,6 @@ export type InsertLocation = z.infer<typeof insertLocationSchema>;
 export type Alert = typeof alerts.$inferSelect;
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export type EmergencyMode = typeof emergencyModes.$inferSelect;
+export type EmergencyReceipt = typeof emergencyReceipts.$inferSelect;
 export type EmergencyModeType = "shelter_in" | "blackout";
 export type UserRole = "admin" | "eco" | "supervisor" | "user";

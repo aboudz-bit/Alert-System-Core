@@ -9,11 +9,13 @@ import {
   type InsertAlert,
   type EmergencyMode,
   type EmergencyModeType,
+  type EmergencyReceipt,
   users,
   zones,
   locations,
   alerts,
   emergencyModes,
+  emergencyReceipts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -21,6 +23,7 @@ import { eq, and } from "drizzle-orm";
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
 
   getZones(): Promise<Zone[]>;
@@ -46,6 +49,10 @@ export interface IStorage {
   getEmergencyModes(): Promise<EmergencyMode[]>;
   activateEmergencyMode(type: EmergencyModeType, activatedBy: string): Promise<EmergencyMode>;
   clearEmergencyMode(id: string, clearedBy: string): Promise<EmergencyMode | undefined>;
+
+  confirmReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt>;
+  getReceiptsByMode(emergencyModeId: string): Promise<EmergencyReceipt[]>;
+  getUserReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -57,6 +64,10 @@ export class DatabaseStorage implements IStorage {
   async getUserByUsername(username: string): Promise<User | undefined> {
     const result = await db.select().from(users).where(eq(users.username, username));
     return result[0];
+  }
+
+  async getUsers(): Promise<User[]> {
+    return db.select().from(users);
   }
 
   async createUser(user: InsertUser): Promise<User> {
@@ -190,6 +201,38 @@ export class DatabaseStorage implements IStorage {
       .set({ status: "cleared", clearedAt: new Date(), clearedBy })
       .where(and(eq(emergencyModes.id, id), eq(emergencyModes.status, "active")))
       .returning();
+    return result[0];
+  }
+
+  async confirmReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt> {
+    const result = await db
+      .insert(emergencyReceipts)
+      .values({ emergencyModeId, userId })
+      .onConflictDoNothing()
+      .returning();
+    if (result.length > 0) return result[0];
+    const existing = await this.getUserReceipt(emergencyModeId, userId);
+    if (!existing) throw new Error("Failed to confirm receipt");
+    return existing;
+  }
+
+  async getReceiptsByMode(emergencyModeId: string): Promise<EmergencyReceipt[]> {
+    return db
+      .select()
+      .from(emergencyReceipts)
+      .where(eq(emergencyReceipts.emergencyModeId, emergencyModeId));
+  }
+
+  async getUserReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt | undefined> {
+    const result = await db
+      .select()
+      .from(emergencyReceipts)
+      .where(
+        and(
+          eq(emergencyReceipts.emergencyModeId, emergencyModeId),
+          eq(emergencyReceipts.userId, userId)
+        )
+      );
     return result[0];
   }
 }
