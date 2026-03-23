@@ -1,12 +1,6 @@
 import { pool } from "./db";
 import { storage } from "./storage";
-import crypto from "crypto";
-
-function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
-}
+import { hashPassword } from "./routes";
 
 async function seed() {
   console.log("Seeding database...");

@@ -5,21 +5,16 @@ import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { pool } from "./db";
 import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema } from "@shared/schema";
-import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 const PgSession = connectPgSimple(session);
 
-function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
+export function hashPassword(password: string): string {
+  return bcrypt.hashSync(password, 10);
 }
 
 function verifyPassword(password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(":");
-  if (!salt || !hash) return false;
-  const testHash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return hash === testHash;
+  return bcrypt.compareSync(password, stored);
 }
 
 declare module "express-session" {

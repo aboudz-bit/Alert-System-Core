@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getApiUrl } from "@/lib/query-client";
+import { getApiUrl, queryClient } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import type { UserRole } from "@shared/schema";
 
@@ -69,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data);
+        queryClient.invalidateQueries();
         return { success: true };
       }
       const errData = await res.json().catch(() => ({ message: "Login failed" }));
@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
     } finally {
       setUser(null);
+      queryClient.clear();
     }
   }, []);
 
