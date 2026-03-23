@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-4)
+# Emergency Alert System - Phase 1 + Phase 2 (Steps 1-5)
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-4: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, and receipt confirmation system. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2 Steps 1-5: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, and alarm sound. Stability is the top priority.
 
 ## Stack
 
@@ -33,8 +33,10 @@ app/                      # Expo Router screens
 components/
   ErrorBoundary.tsx       # Class-based error boundary
   ErrorFallback.tsx       # Error UI with restart
-  EmergencyPanel.tsx      # Shelter In / Blackout activate + clear UI
+  EmergencyPanel.tsx      # Shelter In / Blackout activate + clear UI + receipt confirmation
   NativeMap.tsx           # Native map with polygons, location markers, alert zone highlighting
+hooks/
+  useEmergencyAlarm.ts    # Alarm sound: plays on emergency, repeats 30s until receipt confirmed
   NativeMap.web.tsx       # Web fallback with zone/location/alert counts
 constants/
   colors.ts              # Color constants

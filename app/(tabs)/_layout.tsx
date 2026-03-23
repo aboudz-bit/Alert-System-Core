@@ -5,6 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
+import { useEmergencyAlarm } from "@/hooks/useEmergencyAlarm";
 import type { UserRole } from "@shared/schema";
 
 type TabConfig = {
@@ -41,6 +42,8 @@ export default function TabLayout() {
   const { user } = useAuth();
   const role: UserRole = user?.role || "user";
   const visibleTabs = getVisibleTabs(role);
+
+  useEmergencyAlarm();
 
   return (
     <Tabs
