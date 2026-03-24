@@ -37,6 +37,7 @@ components/
   NativeMap.tsx           # Native map with polygons, location markers, alert zone highlighting
 hooks/
   useEmergencyAlarm.ts    # Alarm sound: plays on emergency, repeats 30s until receipt confirmed
+  useLocationTracker.ts   # GPS location tracking: sends lat/lng to server every 30s
   WindIndicator.tsx       # Wind direction arrow + speed display overlay
   NativeMap.web.tsx       # Web fallback with zone/location/alert/wind counts
 constants/
@@ -99,6 +100,7 @@ People, Zones, Locations, Permissions, ECO, Supervisor, Settings — visibility 
 - `GET /api/wind` - Get current wind conditions (all authenticated)
 - `POST /api/wind` - Update wind direction/speed (admin/eco/supervisor)
 - `PATCH /api/users/:id/assignment` - Assign user to zone/location (admin only)
+- `POST /api/location/update` - Update current user's GPS location (all authenticated)
 - `GET /api/people` - Get all users grouped with zone/location/receipt data (admin/eco/supervisor)
 
 ## Seed Users
@@ -126,3 +128,13 @@ People, Zones, Locations, Permissions, ECO, Supervisor, Settings — visibility 
 - Error boundaries wrap all screen content
 - Platform.OS checks for web vs native map rendering
 - activateEmergencyMode auto-clears any existing active mode before creating new one
+
+## Zone-Targeted Alerts
+
+- Alerts with `zoneId` are zone-targeted: only shown to users physically inside that zone polygon
+- Alerts without `zoneId` (null) are global: shown to all users
+- Admin/ECO/Supervisor roles always see all alerts regardless of location
+- Regular users must have current GPS coordinates stored to receive zone-targeted alerts
+- Point-in-polygon ray-casting algorithm used for location check
+- Client-side location tracker (`useLocationTracker`) sends GPS every 30s via POST /api/location/update
+- Users table stores `current_latitude`, `current_longitude`, `location_updated_at`

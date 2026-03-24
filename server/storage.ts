@@ -91,6 +91,15 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async updateUserLocation(id: string, latitude: number, longitude: number): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({ currentLatitude: latitude, currentLongitude: longitude, locationUpdatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return result[0];
+  }
+
   async getZones(): Promise<Zone[]> {
     return db.select().from(zones);
   }

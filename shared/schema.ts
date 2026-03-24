@@ -23,6 +23,9 @@ export const users = pgTable("users", {
   affiliation: affiliationEnum("affiliation"),
   zoneId: varchar("zone_id").references(() => zones.id),
   locationId: varchar("location_id").references(() => locations.id),
+  currentLatitude: real("current_latitude"),
+  currentLongitude: real("current_longitude"),
+  locationUpdatedAt: timestamp("location_updated_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -174,4 +177,9 @@ export type WindCondition = typeof windConditions.$inferSelect;
 
 export const setResponseStatusSchema = z.object({
   status: z.enum(["safe", "need_help"]),
+});
+
+export const updateUserLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
 });

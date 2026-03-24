@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema, updateUserAssignmentSchema, setResponseStatusSchema } from "@shared/schema";
+import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema, updateUserAssignmentSchema, setResponseStatusSchema, updateUserLocationSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 const PgSession = connectPgSimple(session);
@@ -41,6 +41,29 @@ function requireRole(...roles: string[]) {
     }
     next();
   };
+}
+
+function pointInPolygon(
+  lat: number,
+  lng: number,
+  polygon: Array<{ latitude: number; longitude: number }>
+): boolean {
+  if (!polygon || polygon.length < 3) return false;
+  let inside = false;
+  const n = polygon.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const yi = polygon[i].latitude;
+    const xi = polygon[i].longitude;
+    const yj = polygon[j].latitude;
+    const xj = polygon[j].longitude;
+    if (
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -250,10 +273,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/alerts", requireAuth, async (_req: Request, res: Response) => {
+  app.get("/api/alerts", requireAuth, async (req: Request, res: Response) => {
     try {
       const allAlerts = await storage.getAlerts();
-      return res.json(allAlerts);
+      const userId = req.session.userId;
+      const userRole = req.session.userRole;
+
+      if (userRole === "admin" || userRole === "eco" || userRole === "supervisor") {
+        return res.json(allAlerts);
+      }
+
+      if (!userId) {
+        return res.json([]);
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.json([]);
+      }
+
+      const userLat = user.currentLatitude;
+      const userLng = user.currentLongitude;
+
+      const zoneAlertIds = new Set(
+        allAlerts.filter((a) => a.zoneId).map((a) => a.zoneId as string)
+      );
+
+      let zoneMap = new Map<string, { polygon: unknown }>();
+      if (zoneAlertIds.size > 0) {
+        const allZones = await storage.getZones();
+        for (const z of allZones) {
+          if (zoneAlertIds.has(z.id)) {
+            zoneMap.set(z.id, { polygon: z.polygon });
+          }
+        }
+      }
+
+      const filtered = allAlerts.filter((alert) => {
+        if (!alert.zoneId) return true;
+
+        if (userLat == null || userLng == null) return false;
+
+        const zoneData = zoneMap.get(alert.zoneId);
+        if (!zoneData) return false;
+
+        const polygon = zoneData.polygon as Array<{ latitude: number; longitude: number }>;
+        if (!Array.isArray(polygon) || polygon.length < 3) return false;
+
+        return pointInPolygon(userLat, userLng, polygon);
+      });
+
+      return res.json(filtered);
     } catch (error) {
       console.error("Get alerts error:", error);
       return res.status(500).json({ message: "Internal server error" });
@@ -560,6 +630,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Update user assignment error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/location/update", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = updateUserLocationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid location data" });
+      }
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      await storage.updateUserLocation(userId, parsed.data.latitude, parsed.data.longitude);
+      return res.json({ message: "Location updated" });
+    } catch (error) {
+      console.error("Update user location error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });

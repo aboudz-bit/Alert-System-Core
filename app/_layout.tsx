@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { EmergencyProvider } from "@/lib/emergency-context";
+import { useLocationTracker } from "@/hooks/useLocationTracker";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,6 +23,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  useLocationTracker(isAuthenticated);
 
   useEffect(() => {
     if (isLoading) return;
