@@ -1,7 +1,16 @@
 import React, { useMemo } from "react";
-import MapView, { Polygon, Marker } from "react-native-maps";
+import { View, Text, StyleSheet, Platform } from "react-native";
+import MapView, { Polygon, Marker, Callout } from "react-native-maps";
 import type { Zone, Location, Alert } from "@shared/schema";
 import type { WindData } from "@/lib/store";
+
+export interface PersonnelMarker {
+  id: string;
+  name: string;
+  status: "safe" | "pending" | "need_help" | "no_reply";
+  latitude: number;
+  longitude: number;
+}
 
 interface NativeMapProps {
   zones: Zone[];
@@ -9,9 +18,17 @@ interface NativeMapProps {
   activeAlerts?: Alert[];
   alertZoneIds?: Set<string>;
   windData?: WindData | null;
+  personnel?: PersonnelMarker[];
 }
 
 const EMPTY_SET = new Set<string>();
+
+const PERSONNEL_COLORS: Record<PersonnelMarker["status"], string> = {
+  safe: "#34C759",
+  pending: "#FF9500",
+  need_help: "#FF3B30",
+  no_reply: "#8E8E93",
+};
 
 function isValidPolygon(polygon: unknown): polygon is Array<{ latitude: number; longitude: number }> {
   if (!Array.isArray(polygon)) return false;
@@ -96,7 +113,38 @@ function computeHazardCone(
   return points;
 }
 
-function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData }: NativeMapProps) {
+const STATUS_LABELS: Record<PersonnelMarker["status"], string> = {
+  safe: "Safe",
+  pending: "Pending",
+  need_help: "Need Help",
+  no_reply: "No Reply",
+};
+
+function PersonnelDot({ color }: { color: string }) {
+  return (
+    <View style={markerStyles.outer}>
+      <View style={[markerStyles.dot, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
+const markerStyles = StyleSheet.create({
+  outer: {
+    width: 20,
+    height: 20,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+});
+
+function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData, personnel }: NativeMapProps) {
   const safeZones = useMemo(
     () => (zones || []).filter((z) => z && isValidPolygon(z.polygon)),
     [zones]
@@ -104,6 +152,10 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
   const safeLocations = useMemo(
     () => (locations || []).filter((l) => l && isValidCoord(l.latitude, l.longitude)),
     [locations]
+  );
+  const safePersonnel = useMemo(
+    () => (personnel || []).filter((p) => p && isValidCoord(p.latitude, p.longitude)),
+    [personnel]
   );
   const safeAlertZoneIds = alertZoneIds || EMPTY_SET;
 
@@ -168,6 +220,20 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
           pinColor="#007AFF"
         />
       ))}
+      {safePersonnel.map((p) => {
+        const color = PERSONNEL_COLORS[p.status];
+        return (
+          <Marker
+            key={`person-${p.id}`}
+            coordinate={{ latitude: p.latitude, longitude: p.longitude }}
+            title={p.name}
+            description={STATUS_LABELS[p.status]}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <PersonnelDot color={color} />
+          </Marker>
+        );
+      })}
     </MapView>
   );
 }
@@ -184,6 +250,7 @@ function propsAreEqual(prev: NativeMapProps, next: NativeMapProps): boolean {
     prev.locations === next.locations &&
     prev.activeAlerts === next.activeAlerts &&
     prev.alertZoneIds === next.alertZoneIds &&
+    prev.personnel === next.personnel &&
     windDataEqual(prev.windData, next.windData)
   );
 }
