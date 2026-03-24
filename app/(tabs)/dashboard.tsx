@@ -14,7 +14,7 @@ import Colors from "@/constants/colors";
 import { getQueryFn } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
 import { useEmergency } from "@/lib/emergency-context";
-import type { Zone, Alert as AlertType } from "@shared/schema";
+import type { Zone, Alert as AlertType, Location } from "@shared/schema";
 
 function StatCard({
   icon,
@@ -47,6 +47,7 @@ export default function DashboardScreen() {
   const { emergencyMode, isActive: hasEmergency, receiptSummary } = useEmergency();
   const isPrivileged =
     user?.role === "admin" || user?.role === "eco" || user?.role === "supervisor";
+  const isAdmin = user?.role === "admin";
 
   const { data: zones } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
@@ -58,12 +59,37 @@ export default function DashboardScreen() {
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
+  const { data: locations } = useQuery<Location[]>({
+    queryKey: ["/api/locations"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+  });
+
   const safeZones = Array.isArray(zones) ? zones : [];
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const safeLocations = Array.isArray(locations) ? locations : [];
   const activeAlerts = useMemo(
     () => safeAlerts.filter((a) => a.status === "active"),
     [safeAlerts]
   );
+
+  const zoneMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const z of safeZones) {
+      map[z.id] = z.name;
+    }
+    return map;
+  }, [safeZones]);
+
+  const activeZoneNames = useMemo(() => {
+    if (!hasEmergency || activeAlerts.length === 0) return [];
+    const names = new Set<string>();
+    for (const a of activeAlerts) {
+      if (a.zoneId && zoneMap[a.zoneId]) {
+        names.add(zoneMap[a.zoneId]);
+      }
+    }
+    return Array.from(names);
+  }, [hasEmergency, activeAlerts, zoneMap]);
 
   const receiptStats = useMemo(() => {
     if (!receiptSummary) return { total: 0, confirmed: 0, notConfirmed: 0, safe: 0, needHelp: 0, pending: 0, noReply: 0 };
@@ -78,8 +104,9 @@ export default function DashboardScreen() {
       if ((u as { responseStatus?: string | null }).responseStatus === "safe") safe++;
       else if ((u as { responseStatus?: string | null }).responseStatus === "need_help") needHelp++;
     }
-    const noResponse = total - safe - needHelp;
-    return { total, confirmed, notConfirmed, safe, needHelp, pending: noResponse, noReply: 0 };
+    const pending = confirmed - safe - needHelp;
+    const noReply = total - safe - needHelp - pending;
+    return { total, confirmed, notConfirmed, safe, needHelp, pending, noReply };
   }, [receiptSummary]);
 
   return (
@@ -112,6 +139,11 @@ export default function DashboardScreen() {
             <Text style={styles.emergencySubtext}>
               All personnel should follow emergency procedures
             </Text>
+            {activeZoneNames.length > 0 ? (
+              <Text style={styles.emergencyZones}>
+                Zones: {activeZoneNames.join(", ")}
+              </Text>
+            ) : null}
           </View>
         </View>
       ) : (
@@ -151,6 +183,13 @@ export default function DashboardScreen() {
               </Text>
               <Text style={styles.receiptLbl}>Safe</Text>
             </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: "#8E8E93" }]}>
+                {receiptStats.noReply}
+              </Text>
+              <Text style={styles.receiptLbl}>No Reply</Text>
+            </View>
           </View>
           {receiptStats.total > 0 ? (
             <View style={styles.progressWrap}>
@@ -178,18 +217,65 @@ export default function DashboardScreen() {
                   <View
                     style={{
                       height: 6,
-                      borderRadius: 3,
                       backgroundColor: Colors.light.success,
                       flex: receiptStats.safe,
                     }}
                   />
                 ) : null}
+                {receiptStats.noReply > 0 ? (
+                  <View
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: "#8E8E93",
+                      flex: receiptStats.noReply,
+                    }}
+                  />
+                ) : null}
               </View>
               <Text style={styles.progressText}>
-                {receiptStats.needHelp > 0 ? `${receiptStats.needHelp} need help · ` : ""}{receiptStats.pending} awaiting response · {receiptStats.safe} safe
+                {receiptStats.needHelp > 0 ? `${receiptStats.needHelp} need help \u00B7 ` : ""}{receiptStats.pending} pending \u00B7 {receiptStats.safe} safe \u00B7 {receiptStats.noReply} no reply
               </Text>
             </View>
           ) : null}
+        </View>
+      ) : null}
+
+      {isPrivileged && !hasEmergency ? (
+        <View style={styles.receiptSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Personnel Overview</Text>
+            <Text style={styles.sectionCount}>{receiptStats.total} total</Text>
+          </View>
+          <View style={styles.receiptBar}>
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: Colors.light.tint }]}>
+                {receiptStats.total}
+              </Text>
+              <Text style={styles.receiptLbl}>Personnel</Text>
+            </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: "#8E8E93" }]}>
+                {safeZones.length}
+              </Text>
+              <Text style={styles.receiptLbl}>Zones</Text>
+            </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: "#8E8E93" }]}>
+                {safeLocations.length}
+              </Text>
+              <Text style={styles.receiptLbl}>Locations</Text>
+            </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: activeAlerts.length > 0 ? Colors.light.danger : Colors.light.success }]}>
+                {activeAlerts.length}
+              </Text>
+              <Text style={styles.receiptLbl}>Alerts</Text>
+            </View>
+          </View>
         </View>
       ) : null}
 
@@ -197,7 +283,7 @@ export default function DashboardScreen() {
         <StatCard
           icon="users"
           label="Total Users"
-          value={isPrivileged ? receiptStats.total || "—" : "—"}
+          value={isPrivileged ? receiptStats.total || "\u2014" : "\u2014"}
           color={Colors.light.tint}
           onPress={isPrivileged ? () => router.push("/(tabs)/users" as any) : undefined}
         />
@@ -217,6 +303,15 @@ export default function DashboardScreen() {
           color={activeAlerts.length > 0 ? Colors.light.danger : Colors.light.success}
           onPress={() => router.push("/(tabs)/alerts" as any)}
         />
+        <StatCard
+          icon="map-pin"
+          label="Locations"
+          value={safeLocations.length}
+          color={Colors.light.tint}
+        />
+      </View>
+
+      <View style={styles.statsRow}>
         <StatCard
           icon="shield"
           label="Emergency"
@@ -257,6 +352,15 @@ export default function DashboardScreen() {
               <Feather name="layers" size={18} color={Colors.light.tint} />
               <Text style={styles.quickLabel}>Zones</Text>
             </Pressable>
+            {isAdmin ? (
+              <Pressable
+                style={styles.quickBtn}
+                onPress={() => router.push("/(tabs)/users" as any)}
+              >
+                <Feather name="user-check" size={18} color={Colors.light.tint} />
+                <Text style={styles.quickLabel}>People</Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -282,7 +386,12 @@ export default function DashboardScreen() {
                 ]}
               />
               <View style={styles.alertInfo}>
-                <Text style={styles.alertTitle}>{a.title}</Text>
+                <Text style={styles.alertTitle}>
+                  {a.title}
+                  {a.zoneId && zoneMap[a.zoneId] ? (
+                    <Text style={styles.alertZone}> \u00B7 {zoneMap[a.zoneId]}</Text>
+                  ) : null}
+                </Text>
                 <Text style={styles.alertSeverity}>{a.severity}</Text>
               </View>
             </View>
@@ -320,6 +429,12 @@ const styles = StyleSheet.create({
   emergencySubtext: {
     color: "rgba(255,255,255,0.8)",
     fontSize: 13,
+  },
+  emergencyZones: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 12,
+    fontWeight: "600" as const,
+    marginTop: 4,
   },
   statusCard: {
     flexDirection: "row" as const,
@@ -487,6 +602,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600" as const,
     color: Colors.light.text,
+  },
+  alertZone: {
+    fontSize: 13,
+    fontWeight: "400" as const,
+    color: Colors.light.textSecondary,
   },
   alertSeverity: {
     fontSize: 12,

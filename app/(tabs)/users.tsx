@@ -3,12 +3,13 @@ import {
   StyleSheet,
   View,
   Text,
-  FlatList,
+  SectionList,
   ActivityIndicator,
   Platform,
   Pressable,
   TextInput,
   ScrollView,
+  Modal,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
@@ -50,6 +51,9 @@ interface PeopleResponse {
 
 type PersonnelStatus = "safe" | "pending" | "need_help" | "no_reply";
 type StatusFilter = "all" | "safe" | "pending" | "need_help" | "no_reply";
+type AffiliationFilter = "all" | "aramco" | "contractor";
+
+type PersonWithStatus = PersonEntry & { status: PersonnelStatus | null };
 
 const STATUS_COLORS: Record<PersonnelStatus, string> = {
   safe: Colors.light.success,
@@ -78,6 +82,12 @@ const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: "pending", label: "Pending" },
   { key: "need_help", label: "Need Help" },
   { key: "no_reply", label: "No Reply" },
+];
+
+const AFF_FILTER_OPTIONS: { key: AffiliationFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "aramco", label: "Aramco" },
+  { key: "contractor", label: "Contractor" },
 ];
 
 const STATUS_SORT_PRIORITY: Record<PersonnelStatus, number> = {
@@ -134,7 +144,11 @@ export default function UsersMonitorScreen() {
   const { isActive: hasEmergency, activatedAt: emergencyActivatedAt } = useEmergency();
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [affFilter, setAffFilter] = useState<AffiliationFilter>("all");
+  const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set(["__unassigned__"]));
+  const [selectedPerson, setSelectedPerson] = useState<PersonWithStatus | null>(null);
 
   const { data, isLoading, error } = useQuery<PeopleResponse>({
     queryKey: ["/api/people"],
@@ -158,13 +172,16 @@ export default function UsersMonitorScreen() {
     return m;
   }, [data?.locations]);
 
+  const locationsForZone = useMemo(() => {
+    if (!zoneFilter || !data?.locations) return [];
+    return data.locations.filter((l) => l.zoneId === zoneFilter);
+  }, [zoneFilter, data?.locations]);
+
   const peopleWithStatus = useMemo(() => {
     if (!data?.people) return [];
     return data.people.map((p) => ({
       ...p,
-      status: hasEmergency
-        ? computeStatus(p, emergencyActivatedAt)
-        : null,
+      status: hasEmergency ? computeStatus(p, emergencyActivatedAt) : null,
     }));
   }, [data?.people, hasEmergency, emergencyActivatedAt]);
 
@@ -185,6 +202,14 @@ export default function UsersMonitorScreen() {
       list = list.filter((p) => p.zoneId === zoneFilter);
     }
 
+    if (locationFilter) {
+      list = list.filter((p) => p.locationId === locationFilter);
+    }
+
+    if (affFilter !== "all") {
+      list = list.filter((p) => p.affiliation === affFilter);
+    }
+
     if (statusFilter !== "all" && hasEmergency) {
       list = list.filter((p) => p.status === statusFilter);
     }
@@ -199,7 +224,41 @@ export default function UsersMonitorScreen() {
     }
 
     return list;
-  }, [peopleWithStatus, search, zoneFilter, statusFilter, hasEmergency]);
+  }, [peopleWithStatus, search, zoneFilter, locationFilter, affFilter, statusFilter, hasEmergency]);
+
+  // Group by zone for section list
+  const sections = useMemo(() => {
+    if (search.trim()) return [{ title: "Search Results", zoneId: "__search__", data: filteredPeople }];
+
+    const groups = new Map<string, PersonWithStatus[]>();
+    for (const p of filteredPeople) {
+      const key = p.zoneId || "__unassigned__";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(p);
+    }
+
+    const result: { title: string; zoneId: string; data: PersonWithStatus[] }[] = [];
+    for (const [zoneId, people] of groups) {
+      const title = zoneId === "__unassigned__" ? "Unassigned" : (zoneMap.get(zoneId) || "Unknown Zone");
+      const isExpanded = expandedZones.has(zoneId);
+      result.push({ title, zoneId, data: isExpanded ? people : [] });
+    }
+    return result.sort((a, b) => {
+      if (a.zoneId === "__unassigned__") return 1;
+      if (b.zoneId === "__unassigned__") return -1;
+      return a.title.localeCompare(b.title);
+    });
+  }, [filteredPeople, search, zoneMap, expandedZones]);
+
+  // Counts for sections (even when collapsed)
+  const zoneCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of filteredPeople) {
+      const key = p.zoneId || "__unassigned__";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return counts;
+  }, [filteredPeople]);
 
   const stats = useMemo(() => {
     const all = peopleWithStatus;
@@ -212,8 +271,22 @@ export default function UsersMonitorScreen() {
     return { total, safe, pending, needHelp, noReply };
   }, [peopleWithStatus, hasEmergency]);
 
+  const toggleZone = useCallback((zoneId: string) => {
+    setExpandedZones((prev) => {
+      const next = new Set(prev);
+      if (next.has(zoneId)) next.delete(zoneId);
+      else next.add(zoneId);
+      return next;
+    });
+  }, []);
+
+  const handleZoneFilterChange = useCallback((zId: string | null) => {
+    setZoneFilter(zId);
+    setLocationFilter(null);
+  }, []);
+
   const renderPerson = useCallback(
-    ({ item }: { item: (typeof peopleWithStatus)[0] }) => {
+    ({ item }: { item: PersonWithStatus }) => {
       const zoneName = item.zoneId ? zoneMap.get(item.zoneId) || "Unknown" : "Unassigned";
       const locName = item.locationId ? locationMap.get(item.locationId) || "" : "";
       const locationStr = locName ? `${zoneName} / ${locName}` : zoneName;
@@ -225,10 +298,13 @@ export default function UsersMonitorScreen() {
       const affLabel = item.affiliation === "aramco" ? "Aramco" : item.affiliation === "contractor" ? "Contractor" : null;
 
       return (
-        <View style={[
-          styles.personCard,
-          showStatus && item.status ? { borderLeftWidth: 4, borderLeftColor: statusColor } : null,
-        ]}>
+        <Pressable
+          onPress={() => setSelectedPerson(item)}
+          style={[
+            styles.personCard,
+            showStatus && item.status ? { borderLeftWidth: 4, borderLeftColor: statusColor } : null,
+          ]}
+        >
           <View style={styles.cardHeader}>
             <View style={styles.nameSection}>
               <Text style={styles.personName} numberOfLines={1}>{item.name}</Text>
@@ -267,10 +343,35 @@ export default function UsersMonitorScreen() {
               ) : null}
             </View>
           ) : null}
-        </View>
+        </Pressable>
       );
     },
     [zoneMap, locationMap, hasEmergency]
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: { title: string; zoneId: string; data: PersonWithStatus[] } }) => {
+      if (section.zoneId === "__search__") return null;
+      const count = zoneCounts.get(section.zoneId) || 0;
+      const isExpanded = expandedZones.has(section.zoneId);
+      return (
+        <Pressable
+          style={styles.sectionHeader}
+          onPress={() => toggleZone(section.zoneId)}
+        >
+          <Feather
+            name={isExpanded ? "chevron-down" : "chevron-right"}
+            size={16}
+            color={Colors.light.textSecondary}
+          />
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <View style={styles.sectionCount}>
+            <Text style={styles.sectionCountText}>{count}</Text>
+          </View>
+        </Pressable>
+      );
+    },
+    [zoneCounts, expandedZones, toggleZone]
   );
 
   if (isLoading) {
@@ -309,8 +410,8 @@ export default function UsersMonitorScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: STATUS_COLORS.safe }]}>{stats.safe}</Text>
-            <Text style={styles.statLbl}>Safe</Text>
+            <Text style={[styles.statNum, { color: STATUS_COLORS.need_help }]}>{stats.needHelp}</Text>
+            <Text style={styles.statLbl}>Help</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
@@ -319,8 +420,8 @@ export default function UsersMonitorScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: STATUS_COLORS.need_help }]}>{stats.needHelp}</Text>
-            <Text style={styles.statLbl}>Need Help</Text>
+            <Text style={[styles.statNum, { color: STATUS_COLORS.safe }]}>{stats.safe}</Text>
+            <Text style={styles.statLbl}>Safe</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
@@ -348,41 +449,69 @@ export default function UsersMonitorScreen() {
         ) : null}
       </View>
 
+      {/* Zone filter */}
       <View style={styles.filtersRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterChips}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
           <Pressable
             style={[styles.chip, zoneFilter === null && styles.chipActive]}
-            onPress={() => setZoneFilter(null)}
+            onPress={() => handleZoneFilterChange(null)}
           >
-            <Text style={[styles.chipText, zoneFilter === null && styles.chipTextActive]}>
-              All Zones
-            </Text>
+            <Text style={[styles.chipText, zoneFilter === null && styles.chipTextActive]}>All Zones</Text>
           </Pressable>
           {safeZones.map((z) => (
             <Pressable
               key={z.id}
               style={[styles.chip, zoneFilter === z.id && styles.chipActive]}
-              onPress={() => setZoneFilter(z.id)}
+              onPress={() => handleZoneFilterChange(z.id)}
             >
-              <Text style={[styles.chipText, zoneFilter === z.id && styles.chipTextActive]}>
-                {z.name}
-              </Text>
+              <Text style={[styles.chipText, zoneFilter === z.id && styles.chipTextActive]}>{z.name}</Text>
             </Pressable>
           ))}
         </ScrollView>
       </View>
 
+      {/* Location filter within selected zone */}
+      {zoneFilter && locationsForZone.length > 0 ? (
+        <View style={styles.filtersRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
+            <Pressable
+              style={[styles.chip, locationFilter === null && styles.chipActive]}
+              onPress={() => setLocationFilter(null)}
+            >
+              <Text style={[styles.chipText, locationFilter === null && styles.chipTextActive]}>All Locations</Text>
+            </Pressable>
+            {locationsForZone.map((l) => (
+              <Pressable
+                key={l.id}
+                style={[styles.chip, locationFilter === l.id && styles.chipActive]}
+                onPress={() => setLocationFilter(l.id)}
+              >
+                <Text style={[styles.chipText, locationFilter === l.id && styles.chipTextActive]}>{l.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {/* Affiliation filter */}
+      <View style={styles.filtersRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChips}>
+          {AFF_FILTER_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.key}
+              style={[styles.chip, affFilter === opt.key && styles.chipActive]}
+              onPress={() => setAffFilter(opt.key)}
+            >
+              <Text style={[styles.chipText, affFilter === opt.key && styles.chipTextActive]}>{opt.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Status filter (emergency only) */}
       {hasEmergency ? (
         <View style={styles.statusFilters}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.statusChipsRow}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusChipsRow}>
             {FILTER_OPTIONS.map((opt) => {
               const active = statusFilter === opt.key;
               const dotColor = opt.key !== "all" ? STATUS_COLORS[opt.key] : undefined;
@@ -392,12 +521,8 @@ export default function UsersMonitorScreen() {
                   style={[styles.statusChip, active && styles.statusChipActive]}
                   onPress={() => setStatusFilter(opt.key)}
                 >
-                  {dotColor ? (
-                    <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-                  ) : null}
-                  <Text style={[styles.statusChipText, active && styles.statusChipTextActive]}>
-                    {opt.label}
-                  </Text>
+                  {dotColor ? <View style={[styles.statusDot, { backgroundColor: dotColor }]} /> : null}
+                  <Text style={[styles.statusChipText, active && styles.statusChipTextActive]}>{opt.label}</Text>
                 </Pressable>
               );
             })}
@@ -411,10 +536,12 @@ export default function UsersMonitorScreen() {
         </Text>
       </View>
 
-      <FlatList
-        data={filteredPeople}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={renderPerson}
+        renderSectionHeader={renderSectionHeader}
+        stickySectionHeadersEnabled={false}
         contentContainerStyle={{
           paddingBottom: Platform.OS === "web" ? 84 + 16 : 100,
           paddingHorizontal: 16,
@@ -423,13 +550,84 @@ export default function UsersMonitorScreen() {
           <View style={styles.emptyWrap}>
             <Feather name="users" size={28} color={Colors.light.tabIconDefault} />
             <Text style={styles.emptyText}>
-              {search || zoneFilter || statusFilter !== "all"
+              {search || zoneFilter || statusFilter !== "all" || affFilter !== "all"
                 ? "No personnel match filters"
                 : "No personnel found"}
             </Text>
           </View>
         }
       />
+
+      {/* Detail Modal */}
+      <Modal
+        visible={selectedPerson !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPerson(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelectedPerson(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Personnel Details</Text>
+              <Pressable onPress={() => setSelectedPerson(null)} hitSlop={8}>
+                <Feather name="x" size={20} color={Colors.light.textSecondary} />
+              </Pressable>
+            </View>
+            {selectedPerson ? (
+              <View style={styles.modalBody}>
+                <ModalRow icon="user" label="Name" value={selectedPerson.name} />
+                <ModalRow icon="at-sign" label="Username" value={selectedPerson.username} />
+                <ModalRow icon="hash" label="Badge" value={selectedPerson.badgeNumber || "—"} />
+                <ModalRow icon="shield" label="Role" value={roleLabel(selectedPerson.role)} />
+                <ModalRow
+                  icon="briefcase"
+                  label="Affiliation"
+                  value={selectedPerson.affiliation === "aramco" ? "Aramco" : selectedPerson.affiliation === "contractor" ? "Contractor" : "—"}
+                />
+                <ModalRow
+                  icon="layers"
+                  label="Zone"
+                  value={selectedPerson.zoneId ? zoneMap.get(selectedPerson.zoneId) || "Unknown" : "Unassigned"}
+                />
+                <ModalRow
+                  icon="map-pin"
+                  label="Location"
+                  value={selectedPerson.locationId ? locationMap.get(selectedPerson.locationId) || "Unknown" : "—"}
+                />
+                {hasEmergency && selectedPerson.status ? (
+                  <>
+                    <View style={styles.modalDivider} />
+                    <ModalRow
+                      icon={STATUS_ICONS[selectedPerson.status]}
+                      label="Status"
+                      value={STATUS_LABELS[selectedPerson.status]}
+                      valueColor={STATUS_COLORS[selectedPerson.status]}
+                    />
+                    {selectedPerson.confirmedAt ? (
+                      <ModalRow icon="clock" label="Confirmed" value={formatTime(selectedPerson.confirmedAt)} />
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+function ModalRow({ icon, label, value, valueColor }: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  value: string;
+  valueColor?: string;
+}) {
+  return (
+    <View style={styles.modalRow}>
+      <Feather name={icon} size={14} color={Colors.light.textSecondary} />
+      <Text style={styles.modalLabel}>{label}</Text>
+      <Text style={[styles.modalValue, valueColor ? { color: valueColor, fontWeight: "700" } : null]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -517,7 +715,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   filtersRow: {
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   filterChips: {
     paddingHorizontal: 16,
@@ -544,7 +742,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   statusFilters: {
-    paddingBottom: 6,
+    paddingBottom: 4,
   },
   statusChipsRow: {
     paddingHorizontal: 16,
@@ -580,12 +778,42 @@ const styles = StyleSheet.create({
   },
   resultCount: {
     paddingHorizontal: 16,
-    paddingBottom: 6,
+    paddingBottom: 4,
   },
   resultText: {
     fontSize: 12,
     color: Colors.light.textSecondary,
     fontWeight: "500" as const,
+  },
+  sectionHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    backgroundColor: Colors.light.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    marginTop: 12,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  sectionTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: Colors.light.text,
+  },
+  sectionCount: {
+    backgroundColor: Colors.light.background,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  sectionCountText: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.light.textSecondary,
   },
   personCard: {
     backgroundColor: Colors.light.surface,
@@ -680,5 +908,57 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: Colors.light.surface,
+    borderRadius: 16,
+    padding: 20,
+    width: "100%" as any,
+    maxWidth: 400,
+    maxHeight: "80%" as any,
+  },
+  modalHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: Colors.light.text,
+  },
+  modalBody: {
+    gap: 10,
+  },
+  modalRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    width: 80,
+  },
+  modalValue: {
+    fontSize: 14,
+    fontWeight: "500" as const,
+    color: Colors.light.text,
+    flex: 1,
+    textAlign: "right" as const,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: Colors.light.border,
+    marginVertical: 4,
   },
 });

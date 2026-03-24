@@ -5,6 +5,7 @@ import {
   View,
   Pressable,
   Platform,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -26,20 +27,59 @@ function getRoleLabel(role: string): string {
   }
 }
 
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "\u2014";
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return "\u2014";
+  }
+}
+
+interface InfoRowProps {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  value: string;
+}
+
+function InfoRow({ icon, label, value }: InfoRowProps) {
+  return (
+    <View style={styles.infoRow}>
+      <Feather name={icon} size={18} color={Colors.light.textSecondary} />
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, {
-      paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 90,
-    }]}>
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 90,
+        },
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
           <Feather name="user" size={32} color={Colors.light.tint} />
         </View>
         <Text style={styles.name}>{user?.name || "Unknown"}</Text>
-        <Text style={styles.username}>@{user?.username || "—"}</Text>
+        <Text style={styles.username}>@{user?.username || "\u2014"}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>
             {getRoleLabel(user?.role || "user")}
@@ -48,14 +88,44 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Profile Details</Text>
+        <InfoRow icon="user" label="Name" value={user?.name || "\u2014"} />
+        <View style={styles.separator} />
+        <InfoRow
+          icon="at-sign"
+          label="Username"
+          value={user?.username || "\u2014"}
+        />
+        <View style={styles.separator} />
+        <InfoRow
+          icon="shield"
+          label="Role"
+          value={getRoleLabel(user?.role || "user")}
+        />
+        <View style={styles.separator} />
+        <InfoRow icon="hash" label="Badge Number" value={"\u2014"} />
+        <View style={styles.separator} />
+        <InfoRow icon="briefcase" label="Affiliation" value={"\u2014"} />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Assignments</Text>
+        <InfoRow icon="map-pin" label="Zone Assignment" value={"\u2014"} />
+        <View style={styles.separator} />
+        <InfoRow
+          icon="navigation"
+          label="Location Assignment"
+          value={"\u2014"}
+        />
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
-        <View style={styles.infoRow}>
-          <Feather name="shield" size={18} color={Colors.light.textSecondary} />
-          <Text style={styles.infoLabel}>Role</Text>
-          <Text style={styles.infoValue}>
-            {getRoleLabel(user?.role || "user")}
-          </Text>
-        </View>
+        <InfoRow
+          icon="calendar"
+          label="Account Created"
+          value={formatDate(user?.createdAt)}
+        />
       </View>
 
       <Pressable
@@ -66,14 +136,16 @@ export default function SettingsScreen() {
         <Feather name="log-out" size={18} color={Colors.light.danger} />
         <Text style={styles.logoutText}>Sign Out</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollView: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  container: {
     padding: 16,
     gap: 20,
   },
@@ -131,6 +203,11 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.light.border,
   },
   infoRow: {
     flexDirection: "row" as const,
@@ -145,6 +222,8 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 15,
     color: Colors.light.textSecondary,
+    flexShrink: 1,
+    textAlign: "right" as const,
   },
   logoutBtn: {
     flexDirection: "row" as const,
