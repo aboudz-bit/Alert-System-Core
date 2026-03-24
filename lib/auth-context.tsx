@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getApiUrl, queryClient } from "@/lib/query-client";
+import { buildApiUrl, queryClient } from "@/lib/query-client";
 import { useAppStore } from "@/lib/store";
 import { fetch } from "expo/fetch";
 import type { UserRole } from "@shared/schema";
@@ -36,9 +36,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = useCallback(async () => {
     try {
-      const baseUrl = getApiUrl();
-      const url = new URL("/api/auth/me", baseUrl);
-      const res = await fetch(url.toString(), { credentials: "include" });
+      const url = buildApiUrl("/api/auth/me");
+      const res = await fetch(url, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setUser(data);
@@ -58,9 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     try {
-      const baseUrl = getApiUrl();
-      const url = new URL("/api/auth/login", baseUrl);
-      const res = await fetch(url.toString(), {
+      const url = buildApiUrl("/api/auth/login");
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -81,9 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      const baseUrl = getApiUrl();
-      const url = new URL("/api/auth/logout", baseUrl);
-      await fetch(url.toString(), { method: "POST", credentials: "include" });
+      const url = buildApiUrl("/api/auth/logout");
+      await fetch(url, { method: "POST", credentials: "include" });
     } catch {
     } finally {
       setUser(null);
