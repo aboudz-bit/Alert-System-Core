@@ -21,7 +21,6 @@ interface MenuItem {
 }
 
 const MENU_ITEMS: MenuItem[] = [
-  { key: "people", label: "People", icon: "users", route: "/(tabs)/people", roles: ["admin", "eco", "supervisor"] },
   { key: "zones", label: "Zones", icon: "layers", route: "/(tabs)/zones", roles: ["admin", "supervisor"] },
   { key: "locations", label: "Locations", icon: "map-pin", route: "/(tabs)/locations", roles: ["admin"] },
   { key: "permissions", label: "Permissions", icon: "shield", route: "/(tabs)/permissions", roles: ["admin"] },

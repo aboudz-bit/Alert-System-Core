@@ -23,7 +23,6 @@ const MAIN_TABS: TabConfig[] = [
 ];
 
 const HIDDEN_TABS: TabConfig[] = [
-  { name: "people", title: "People", icon: "users" },
   { name: "zones", title: "Zones", icon: "layers" },
   { name: "locations", title: "Locations", icon: "map-pin" },
   { name: "permissions", title: "Permissions", icon: "shield" },
