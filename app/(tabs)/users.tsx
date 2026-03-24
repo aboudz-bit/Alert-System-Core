@@ -237,13 +237,13 @@ export default function UsersMonitorScreen() {
                   <Text style={styles.badgeNumber}>Badge {item.badgeNumber}</Text>
                 ) : null}
                 {affLabel ? (
-                  <View style={[styles.affBadge, { backgroundColor: item.affiliation === "aramco" ? "#003D6B18" : "#6B73801A" }]}>
+                  <View style={[styles.affBadge, { backgroundColor: item.affiliation === "aramco" ? "#003D6B18" : "#B8860B1A" }]}>
                     <Feather
                       name={item.affiliation === "aramco" ? "briefcase" : "tool"}
                       size={10}
-                      color={item.affiliation === "aramco" ? "#003D6B" : "#6B7380"}
+                      color={item.affiliation === "aramco" ? "#003D6B" : "#B8860B"}
                     />
-                    <Text style={[styles.affText, { color: item.affiliation === "aramco" ? "#003D6B" : "#6B7380" }]}>{affLabel}</Text>
+                    <Text style={[styles.affText, { color: item.affiliation === "aramco" ? "#003D6B" : "#B8860B" }]}>{affLabel}</Text>
                   </View>
                 ) : null}
               </View>
