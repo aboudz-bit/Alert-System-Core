@@ -16,6 +16,7 @@ const Colors = {
     severityMedium: "#FF9500",
     severityHigh: "#FF3B30",
     severityCritical: "#FF2D55",
+    pending: "#FF9500",
   },
 };
 
