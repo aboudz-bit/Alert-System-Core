@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { apiRequest, queryClient, getQueryFn } from "@/lib/query-client";
+import DrawZoneMap from "@/components/DrawZoneMap";
 import type { Zone } from "@shared/schema";
 
 const PRESET_COLORS = ["#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF", "#AF52DE", "#8E8E93"];
@@ -43,6 +44,8 @@ export default function CreateZoneScreen() {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("#FF3B30");
   const [zoneType, setZoneType] = useState("general");
+  const [polygonPoints, setPolygonPoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
+  const [showManualInput, setShowManualInput] = useState(false);
   const [pointsText, setPointsText] = useState("");
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
@@ -54,38 +57,56 @@ export default function CreateZoneScreen() {
       setColor(existingZone.color || "#FF3B30");
       setZoneType((existingZone as any).zoneType || "general");
       const poly = Array.isArray(existingZone.polygon) ? existingZone.polygon : [];
-      setPointsText(
-        poly
-          .map((p: any) => `${p.latitude}, ${p.longitude}`)
-          .join("\n")
-      );
+      const validPoints = poly.filter(
+        (p: any) => p && typeof p.latitude === "number" && typeof p.longitude === "number"
+      ) as Array<{ latitude: number; longitude: number }>;
+      setPolygonPoints(validPoints);
       setInitialized(true);
     }
   }, [isEditing, existingZone, initialized]);
 
+  const handlePointsChange = useCallback((pts: Array<{ latitude: number; longitude: number }>) => {
+    setPolygonPoints(pts);
+  }, []);
+
+  const handleApplyManualPoints = useCallback(() => {
+    if (!pointsText.trim()) return;
+    const lines = pointsText.trim().split("\n");
+    const newPoints: Array<{ latitude: number; longitude: number }> = [];
+    for (const line of lines) {
+      const parts = line.split(",").map((s) => s.trim());
+      if (parts.length !== 2) {
+        setError("Each line must be: latitude, longitude");
+        return;
+      }
+      const lat = parseFloat(parts[0]);
+      const lng = parseFloat(parts[1]);
+      if (isNaN(lat) || isNaN(lng)) {
+        setError("Invalid number in coordinates");
+        return;
+      }
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        setError("Coordinates out of range");
+        return;
+      }
+      newPoints.push({ latitude: lat, longitude: lng });
+    }
+    setPolygonPoints(newPoints);
+    setShowManualInput(false);
+    setPointsText("");
+    setError("");
+  }, [pointsText]);
+
   const mutation = useMutation({
     mutationFn: async () => {
-      let polygon: Array<{ latitude: number; longitude: number }> = [];
-
-      if (pointsText.trim()) {
-        const lines = pointsText.trim().split("\n");
-        for (const line of lines) {
-          const parts = line.split(",").map((s) => s.trim());
-          if (parts.length !== 2) throw new Error("Each line must be: latitude, longitude");
-          const lat = parseFloat(parts[0]);
-          const lng = parseFloat(parts[1]);
-          if (isNaN(lat) || isNaN(lng)) throw new Error("Invalid number in coordinates");
-          if (lat < -90 || lat > 90) throw new Error("Latitude must be -90 to 90");
-          if (lng < -180 || lng > 180) throw new Error("Longitude must be -180 to 180");
-          polygon.push({ latitude: lat, longitude: lng });
-        }
-        if (polygon.length < 3) throw new Error("A zone polygon needs at least 3 points");
+      if (polygonPoints.length < 3) {
+        throw new Error("A zone polygon needs at least 3 points");
       }
 
       const body = {
         name: name.trim(),
         description: description.trim(),
-        polygon,
+        polygon: polygonPoints,
         color,
         zoneType,
       };
@@ -110,6 +131,10 @@ export default function CreateZoneScreen() {
   const handleSave = () => {
     if (!name.trim()) {
       setError("Zone name is required");
+      return;
+    }
+    if (polygonPoints.length < 3) {
+      setError("Draw at least 3 points on the map to create a zone polygon");
       return;
     }
     setError("");
@@ -200,21 +225,46 @@ export default function CreateZoneScreen() {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Polygon Points</Text>
-        <Text style={styles.hint}>
-          One point per line: latitude, longitude{"\n"}
-          Minimum 3 points to form a polygon.{"\n"}
-          Tip: Use Google Maps to find coordinates.
-        </Text>
-        <TextInput
-          style={[styles.input, styles.textArea, { minHeight: 120 }]}
-          value={pointsText}
-          onChangeText={setPointsText}
-          placeholder={"24.6333, 46.7167\n24.6340, 46.7175\n24.6328, 46.7180"}
-          placeholderTextColor="#999"
-          multiline
-          numberOfLines={6}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.label}>Draw Zone on Map *</Text>
+          <Pressable
+            style={styles.manualToggle}
+            onPress={() => setShowManualInput(!showManualInput)}
+          >
+            <Feather name="edit-3" size={14} color={Colors.light.tint} />
+            <Text style={styles.manualToggleText}>
+              {showManualInput ? "Hide manual" : "Manual input"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <DrawZoneMap
+          points={polygonPoints}
+          onPointsChange={handlePointsChange}
+          color={color}
         />
+
+        {showManualInput && (
+          <View style={styles.manualSection}>
+            <Text style={styles.hint}>
+              One point per line: latitude, longitude{"\n"}
+              This will replace all drawn points.
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea, { minHeight: 100 }]}
+              value={pointsText}
+              onChangeText={setPointsText}
+              placeholder={"24.6333, 46.7167\n24.6340, 46.7175\n24.6328, 46.7180"}
+              placeholderTextColor="#999"
+              multiline
+              numberOfLines={5}
+            />
+            <Pressable style={styles.applyButton} onPress={handleApplyManualPoints}>
+              <Feather name="check" size={16} color="#fff" />
+              <Text style={styles.applyButtonText}>Apply Coordinates</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       <Pressable
@@ -260,6 +310,11 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     gap: 6,
+  },
+  sectionHeader: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
   },
   label: {
     fontSize: 14,
@@ -315,6 +370,39 @@ const styles = StyleSheet.create({
   colorSelected: {
     borderWidth: 3,
     borderColor: Colors.light.text,
+  },
+  manualToggle: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+  },
+  manualToggleText: {
+    fontSize: 13,
+    color: Colors.light.tint,
+    fontWeight: "500" as const,
+  },
+  manualSection: {
+    gap: 8,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: Colors.light.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  applyButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 6,
+    backgroundColor: Colors.light.tint,
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  applyButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600" as const,
   },
   button: {
     backgroundColor: Colors.light.tint,
