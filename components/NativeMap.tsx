@@ -1,6 +1,7 @@
-import React, { useMemo } from "react";
-import { View, Text, StyleSheet, Platform } from "react-native";
+import React, { useMemo, useRef, useCallback } from "react";
+import { View, Text, StyleSheet, Platform, Pressable } from "react-native";
 import MapView, { Polygon, Marker, Callout, PROVIDER_GOOGLE } from "react-native-maps";
+import { Feather } from "@expo/vector-icons";
 import type { Zone, Location, Alert } from "@shared/schema";
 import type { WindData } from "@/lib/store";
 
@@ -19,6 +20,7 @@ interface NativeMapProps {
   alertZoneIds?: Set<string>;
   windData?: WindData | null;
   personnel?: PersonnelMarker[];
+  showMyLocation?: boolean;
 }
 
 const EMPTY_SET = new Set<string>();
@@ -204,7 +206,42 @@ function computeInitialRegion(
   };
 }
 
-function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData, personnel }: NativeMapProps) {
+function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData, personnel, showMyLocation = true }: NativeMapProps) {
+  const mapRef = useRef<MapView>(null);
+
+  const handleMyLocation = useCallback(async () => {
+    if (Platform.OS === "web") {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          mapRef.current?.animateToRegion({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }, 500);
+        },
+        () => {},
+        { enableHighAccuracy: false, timeout: 10000 }
+      );
+      return;
+    }
+    try {
+      const Location = await import("expo-location");
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== "granted") return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      mapRef.current?.animateToRegion({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 500);
+    } catch {}
+  }, []);
   const safeZones = useMemo(
     () => (zones || []).filter((z) => z && isValidPolygon(z.polygon)),
     [zones]
@@ -242,11 +279,14 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
   }, [safeZones, safeAlertZoneIds, windData]);
 
   return (
+    <View style={{ flex: 1 }}>
     <MapView
+      ref={mapRef}
       style={{ flex: 1 }}
       provider={Platform.OS === "ios" ? undefined : PROVIDER_GOOGLE}
       initialRegion={initialRegion}
-      showsUserLocation={false}
+      showsUserLocation={showMyLocation}
+      showsMyLocationButton={false}
       mapType="standard"
     >
       {safeZones.map((zone) => {
@@ -280,6 +320,22 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
             strokeColor={strokeColor}
             strokeWidth={strokeWidth}
           />
+        );
+      })}
+      {safeZones.map((zone) => {
+        const poly = zone.polygon as Array<{ latitude: number; longitude: number }>;
+        const centroid = computePolygonCentroid(poly);
+        return (
+          <Marker
+            key={`label-${zone.id}`}
+            coordinate={centroid}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}
+          >
+            <View style={zoneLabelStyles.container}>
+              <Text style={zoneLabelStyles.text} numberOfLines={1}>{zone.name}</Text>
+            </View>
+          </Marker>
         );
       })}
       {hazardCones.map((cone) => (
@@ -318,8 +374,57 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
         );
       })}
     </MapView>
+    {showMyLocation ? (
+      <Pressable
+        style={({ pressed }) => [
+          mapFabStyles.fab,
+          pressed && { opacity: 0.8 },
+        ]}
+        onPress={handleMyLocation}
+        accessibilityLabel="My Current Location"
+        accessibilityRole="button"
+      >
+        <Feather name="crosshair" size={20} color="#007AFF" />
+      </Pressable>
+    ) : null}
+    </View>
   );
 }
+
+const zoneLabelStyles = StyleSheet.create({
+  container: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 120,
+  },
+  text: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+});
+
+const mapFabStyles = StyleSheet.create({
+  fab: {
+    position: "absolute",
+    bottom: 16,
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+});
 
 function windDataEqual(a?: WindData | null, b?: WindData | null): boolean {
   if (a === b) return true;
@@ -334,6 +439,7 @@ function propsAreEqual(prev: NativeMapProps, next: NativeMapProps): boolean {
     prev.activeAlerts === next.activeAlerts &&
     prev.alertZoneIds === next.alertZoneIds &&
     prev.personnel === next.personnel &&
+    prev.showMyLocation === next.showMyLocation &&
     windDataEqual(prev.windData, next.windData)
   );
 }

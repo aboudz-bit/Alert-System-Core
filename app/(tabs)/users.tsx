@@ -237,8 +237,13 @@ export default function UsersMonitorScreen() {
                   <Text style={styles.badgeNumber}>Badge {item.badgeNumber}</Text>
                 ) : null}
                 {affLabel ? (
-                  <View style={[styles.affBadge, { backgroundColor: item.affiliation === "aramco" ? "#0066B1" + "18" : Colors.light.tabIconDefault + "18" }]}>
-                    <Text style={[styles.affText, { color: item.affiliation === "aramco" ? "#0066B1" : Colors.light.tabIconDefault }]}>{affLabel}</Text>
+                  <View style={[styles.affBadge, { backgroundColor: item.affiliation === "aramco" ? "#003D6B18" : "#B8860B1A" }]}>
+                    <Feather
+                      name={item.affiliation === "aramco" ? "briefcase" : "tool"}
+                      size={10}
+                      color={item.affiliation === "aramco" ? "#003D6B" : "#B8860B"}
+                    />
+                    <Text style={[styles.affText, { color: item.affiliation === "aramco" ? "#003D6B" : "#B8860B" }]}>{affLabel}</Text>
                   </View>
                 ) : null}
               </View>
@@ -607,9 +612,12 @@ const styles = StyleSheet.create({
     flexWrap: "wrap" as const,
   },
   affBadge: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 3,
     borderRadius: 4,
     paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingVertical: 2,
   },
   affText: {
     fontSize: 10,

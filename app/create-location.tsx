@@ -40,6 +40,51 @@ export default function CreateLocationScreen() {
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+
+  const handleUseMyLocation = async () => {
+    setGpsLoading(true);
+    setError("");
+    try {
+      if (Platform.OS === "web") {
+        if (!navigator.geolocation) {
+          setError("Geolocation not available in this browser");
+          setGpsLoading(false);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLatitude(pos.coords.latitude.toFixed(6));
+            setLongitude(pos.coords.longitude.toFixed(6));
+            setGpsLoading(false);
+          },
+          () => {
+            setError("Could not get location. Check browser permissions.");
+            setGpsLoading(false);
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+        return;
+      }
+      const Location = await import("expo-location");
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== "granted") {
+          setError("Location permission not granted");
+          setGpsLoading(false);
+          return;
+        }
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setLatitude(loc.coords.latitude.toFixed(6));
+      setLongitude(loc.coords.longitude.toFixed(6));
+    } catch {
+      setError("Could not get current location");
+    } finally {
+      setGpsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (isEditing && existingLoc && !initialized) {
@@ -153,6 +198,22 @@ export default function CreateLocationScreen() {
             />
           </View>
         </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.gpsButton,
+            pressed && { opacity: 0.85 },
+            gpsLoading && { opacity: 0.6 },
+          ]}
+          onPress={handleUseMyLocation}
+          disabled={gpsLoading}
+        >
+          {gpsLoading ? (
+            <ActivityIndicator size="small" color={Colors.light.tint} />
+          ) : (
+            <Feather name="crosshair" size={16} color={Colors.light.tint} />
+          )}
+          <Text style={styles.gpsButtonText}>Use My Current Location</Text>
+        </Pressable>
       </View>
 
       {safeZones.length > 0 ? (
@@ -256,6 +317,23 @@ const styles = StyleSheet.create({
   coordLabel: {
     fontSize: 12,
     color: Colors.light.tabIconDefault,
+  },
+  gpsButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.light.tint,
+    backgroundColor: `${Colors.light.tint}08`,
+    marginTop: 4,
+  },
+  gpsButtonText: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: Colors.light.tint,
   },
   zoneList: {
     gap: 6,

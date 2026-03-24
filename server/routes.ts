@@ -6,6 +6,7 @@ import { storage } from "./storage";
 import { pool } from "./db";
 import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema, updateUserAssignmentSchema, setResponseStatusSchema, updateUserLocationSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
+import { pointInPolygon } from "./utils/geo";
 
 const PgSession = connectPgSimple(session);
 
@@ -43,28 +44,7 @@ function requireRole(...roles: string[]) {
   };
 }
 
-function pointInPolygon(
-  lat: number,
-  lng: number,
-  polygon: Array<{ latitude: number; longitude: number }>
-): boolean {
-  if (!polygon || polygon.length < 3) return false;
-  let inside = false;
-  const n = polygon.length;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const yi = polygon[i].latitude;
-    const xi = polygon[i].longitude;
-    const yj = polygon[j].latitude;
-    const xj = polygon[j].longitude;
-    if (
-      yi > lat !== yj > lat &&
-      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
-    ) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
+// pointInPolygon is imported from ./utils/geo
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
