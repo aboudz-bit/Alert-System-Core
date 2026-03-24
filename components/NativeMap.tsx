@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Platform } from "react-native";
-import MapView, { Polygon, Marker, Callout } from "react-native-maps";
+import MapView, { Polygon, Marker, Callout, PROVIDER_GOOGLE } from "react-native-maps";
 import type { Zone, Location, Alert } from "@shared/schema";
 import type { WindData } from "@/lib/store";
 
@@ -244,8 +244,10 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
   return (
     <MapView
       style={{ flex: 1 }}
+      provider={Platform.OS === "ios" ? undefined : PROVIDER_GOOGLE}
       initialRegion={initialRegion}
       showsUserLocation={false}
+      mapType="standard"
     >
       {safeZones.map((zone) => {
         const poly = zone.polygon as Array<{ latitude: number; longitude: number }>;
