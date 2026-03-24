@@ -23,6 +23,7 @@ interface PersonEntry {
   username: string;
   role: string;
   badgeNumber: string | null;
+  affiliation: "aramco" | "contractor" | null;
   zoneId: string | null;
   locationId: string | null;
   receiptStatus: "confirmed" | "not_confirmed" | null;
@@ -78,6 +79,13 @@ const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
   { key: "need_help", label: "Need Help" },
   { key: "no_reply", label: "No Reply" },
 ];
+
+const STATUS_SORT_PRIORITY: Record<PersonnelStatus, number> = {
+  need_help: 0,
+  pending: 1,
+  no_reply: 2,
+  safe: 3,
+};
 
 const PENDING_WINDOW_MS = 10 * 60 * 1000;
 
@@ -181,6 +189,15 @@ export default function UsersMonitorScreen() {
       list = list.filter((p) => p.status === statusFilter);
     }
 
+    if (hasEmergency) {
+      list = [...list].sort((a, b) => {
+        const aPri = a.status ? STATUS_SORT_PRIORITY[a.status] : 4;
+        const bPri = b.status ? STATUS_SORT_PRIORITY[b.status] : 4;
+        if (aPri !== bPri) return aPri - bPri;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
     return list;
   }, [peopleWithStatus, search, zoneFilter, statusFilter, hasEmergency]);
 
@@ -205,6 +222,7 @@ export default function UsersMonitorScreen() {
       const statusIcon = item.status ? STATUS_ICONS[item.status] : undefined;
       const badgeColor = roleBadgeColor(item.role);
       const showStatus = hasEmergency;
+      const affLabel = item.affiliation === "aramco" ? "Aramco" : item.affiliation === "contractor" ? "Contractor" : null;
 
       return (
         <View style={[
@@ -214,9 +232,16 @@ export default function UsersMonitorScreen() {
           <View style={styles.cardHeader}>
             <View style={styles.nameSection}>
               <Text style={styles.personName} numberOfLines={1}>{item.name}</Text>
-              {item.badgeNumber ? (
-                <Text style={styles.badgeNumber}>Badge {item.badgeNumber}</Text>
-              ) : null}
+              <View style={styles.metaRow}>
+                {item.badgeNumber ? (
+                  <Text style={styles.badgeNumber}>Badge {item.badgeNumber}</Text>
+                ) : null}
+                {affLabel ? (
+                  <View style={[styles.affBadge, { backgroundColor: item.affiliation === "aramco" ? "#0066B1" + "18" : Colors.light.tabIconDefault + "18" }]}>
+                    <Text style={[styles.affText, { color: item.affiliation === "aramco" ? "#0066B1" : Colors.light.tabIconDefault }]}>{affLabel}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
             <View style={[styles.roleBadge, { backgroundColor: badgeColor + "18" }]}>
               <Text style={[styles.roleText, { color: badgeColor }]}>{roleLabel(item.role)}</Text>
@@ -574,6 +599,21 @@ const styles = StyleSheet.create({
   nameSection: {
     flex: 1,
     gap: 2,
+  },
+  metaRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    flexWrap: "wrap" as const,
+  },
+  affBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  affText: {
+    fontSize: 10,
+    fontWeight: "600" as const,
   },
   personName: {
     fontSize: 16,

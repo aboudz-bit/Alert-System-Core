@@ -126,13 +126,16 @@ export default function DashboardScreen() {
 
       {isPrivileged && hasEmergency ? (
         <View style={styles.receiptSection}>
-          <Text style={styles.sectionTitle}>Personnel Status</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Personnel Status</Text>
+            <Text style={styles.sectionCount}>{receiptStats.total} total</Text>
+          </View>
           <View style={styles.receiptBar}>
             <View style={styles.receiptItem}>
-              <Text style={[styles.receiptNum, { color: Colors.light.success }]}>
-                {receiptStats.safe}
+              <Text style={[styles.receiptNum, { color: Colors.light.danger }]}>
+                {receiptStats.needHelp}
               </Text>
-              <Text style={styles.receiptLbl}>Safe</Text>
+              <Text style={styles.receiptLbl}>Need Help</Text>
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptItem}>
@@ -143,37 +146,47 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptItem}>
-              <Text style={[styles.receiptNum, { color: Colors.light.danger }]}>
-                {receiptStats.needHelp}
+              <Text style={[styles.receiptNum, { color: Colors.light.success }]}>
+                {receiptStats.safe}
               </Text>
-              <Text style={styles.receiptLbl}>Need Help</Text>
+              <Text style={styles.receiptLbl}>Safe</Text>
             </View>
           </View>
           {receiptStats.total > 0 ? (
             <View style={styles.progressWrap}>
               <View style={styles.progressBg}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { backgroundColor: Colors.light.success },
-                    {
-                      width: `${Math.round((receiptStats.safe / receiptStats.total) * 100)}%`,
-                    },
-                  ]}
-                />
                 {receiptStats.needHelp > 0 ? (
                   <View
-                    style={[
-                      styles.progressFillDanger,
-                      {
-                        width: `${Math.round((receiptStats.needHelp / receiptStats.total) * 100)}%`,
-                      },
-                    ]}
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: Colors.light.danger,
+                      flex: receiptStats.needHelp,
+                    }}
+                  />
+                ) : null}
+                {receiptStats.pending > 0 ? (
+                  <View
+                    style={{
+                      height: 6,
+                      backgroundColor: Colors.light.warning,
+                      flex: receiptStats.pending,
+                    }}
+                  />
+                ) : null}
+                {receiptStats.safe > 0 ? (
+                  <View
+                    style={{
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: Colors.light.success,
+                      flex: receiptStats.safe,
+                    }}
                   />
                 ) : null}
               </View>
               <Text style={styles.progressText}>
-                {receiptStats.safe} safe, {receiptStats.needHelp} need help, {receiptStats.pending} pending
+                {receiptStats.needHelp > 0 ? `${receiptStats.needHelp} need help · ` : ""}{receiptStats.pending} awaiting response · {receiptStats.safe} safe
               </Text>
             </View>
           ) : null}
@@ -368,16 +381,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: Colors.light.border,
     overflow: "hidden" as const,
-  },
-  progressFill: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.light.success,
-  },
-  progressFillDanger: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.light.danger,
+    flexDirection: "row" as const,
   },
   progressText: {
     fontSize: 11,
@@ -416,10 +420,20 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     fontWeight: "500" as const,
   },
+  sectionHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "700" as const,
     color: Colors.light.text,
+  },
+  sectionCount: {
+    fontSize: 12,
+    fontWeight: "500" as const,
+    color: Colors.light.textSecondary,
   },
   quickSection: {
     marginBottom: 16,

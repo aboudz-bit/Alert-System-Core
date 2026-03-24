@@ -235,19 +235,19 @@ export default function MapScreen() {
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: "#34C759" }]} />
-              <Text style={styles.legendText}>{statusCounts.safe}</Text>
+              <Text style={styles.legendText}>{statusCounts.safe} Safe</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: "#FF9500" }]} />
-              <Text style={styles.legendText}>{statusCounts.pending}</Text>
+              <Text style={styles.legendText}>{statusCounts.pending} Pend</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: "#FF3B30" }]} />
-              <Text style={styles.legendText}>{statusCounts.need_help}</Text>
+              <Text style={styles.legendText}>{statusCounts.need_help} Help</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: "#8E8E93" }]} />
-              <Text style={styles.legendText}>{statusCounts.no_reply}</Text>
+              <Text style={styles.legendText}>{statusCounts.no_reply} N/R</Text>
             </View>
           </View>
         </View>

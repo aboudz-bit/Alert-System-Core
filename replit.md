@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 + Need Help Support
+# Emergency Alert System - Phase 1 + Phase 2 + Phase 3 + Polish
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, wind/hazard overlays, Users operations monitor, Dashboard operations view. Phase 3: Real need_help/safe response status separate from receipt confirmation, personnel markers on Zone Map with status colors, unified EmergencyProvider context. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, wind/hazard overlays, Users operations monitor, Dashboard operations view. Phase 3: Real need_help/safe response status separate from receipt confirmation, personnel markers on Zone Map with status colors, unified EmergencyProvider context. Polish: Users sorted by status priority (need_help first), affiliation support (Aramco/Contractor display-only), clearer Dashboard status summary, Zone Map legend labels, cleanup. Stability is the top priority.
 
 ## Stack
 
@@ -57,7 +57,7 @@ shared/
 
 ## Database Schema
 
-- **users**: id, username, password, name, role (admin/eco/supervisor/user), badgeNumber (text, nullable), zoneId (FK zones, nullable), locationId (FK locations, nullable)
+- **users**: id, username, password, name, role (admin/eco/supervisor/user), badgeNumber (text, nullable), affiliation (aramco/contractor, nullable, display-only), zoneId (FK zones, nullable), locationId (FK locations, nullable)
 - **zones**: id, name, description, polygon (jsonb), color
 - **locations**: id, name, latitude, longitude, zoneId (FK zones)
 - **alerts**: id, title, description, severity, status, zoneId (FK zones), createdBy (FK users)

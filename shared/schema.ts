@@ -3,6 +3,7 @@ import { pgTable, text, varchar, timestamp, jsonb, real, pgEnum, unique } from "
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const affiliationEnum = pgEnum("user_affiliation", ["aramco", "contractor"]);
 export const roleEnum = pgEnum("user_role", ["admin", "eco", "supervisor", "user"]);
 export const alertStatusEnum = pgEnum("alert_status", ["active", "cleared"]);
 export const alertSeverityEnum = pgEnum("alert_severity", ["low", "medium", "high", "critical"]);
@@ -18,6 +19,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: roleEnum("role").notNull().default("user"),
   badgeNumber: text("badge_number"),
+  affiliation: affiliationEnum("affiliation"),
   zoneId: varchar("zone_id").references(() => zones.id),
   locationId: varchar("location_id").references(() => locations.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -78,6 +80,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   name: true,
   role: true,
   badgeNumber: true,
+  affiliation: true,
 });
 
 export const loginSchema = z.object({
@@ -162,6 +165,7 @@ export type EmergencyReceipt = typeof emergencyReceipts.$inferSelect;
 export type EmergencyModeType = "shelter_in" | "blackout";
 export type ResponseStatus = "safe" | "need_help";
 export type UserRole = "admin" | "eco" | "supervisor" | "user";
+export type UserAffiliation = "aramco" | "contractor";
 export type WindCondition = typeof windConditions.$inferSelect;
 
 export const setResponseStatusSchema = z.object({

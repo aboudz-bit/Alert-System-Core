@@ -590,6 +590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           username: u.username,
           role: u.role,
           badgeNumber: u.badgeNumber || null,
+          affiliation: u.affiliation || null,
           zoneId: u.zoneId || null,
           locationId: u.locationId || null,
           receiptStatus: activeEmergency ? (receipt ? "confirmed" : "not_confirmed") : null,
