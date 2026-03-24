@@ -22,7 +22,7 @@ interface MenuItem {
 
 const MENU_ITEMS: MenuItem[] = [
   { key: "zones", label: "Zones", icon: "layers", route: "/(tabs)/zones", roles: ["admin", "supervisor"] },
-  { key: "locations", label: "Locations", icon: "map-pin", route: "/(tabs)/locations", roles: ["admin"] },
+  { key: "locations", label: "Locations", icon: "map-pin", route: "/(tabs)/locations", roles: ["admin", "supervisor"] },
   { key: "permissions", label: "Permissions", icon: "shield", route: "/(tabs)/permissions", roles: ["admin"] },
   { key: "eco", label: "ECO", icon: "radio", route: "/(tabs)/eco", roles: ["admin", "eco"] },
   { key: "supervisor", label: "Supervisor", icon: "eye", route: "/(tabs)/supervisor", roles: ["admin", "supervisor"] },

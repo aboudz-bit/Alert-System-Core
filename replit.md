@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 + Phase 3 + Polish
+# Emergency Alert System - Full Manual Configuration
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, wind/hazard overlays, Users operations monitor, Dashboard operations view. Phase 3: Real need_help/safe response status separate from receipt confirmation, personnel markers on Zone Map with status colors, unified EmergencyProvider context. Polish: Users sorted by status priority (need_help first), affiliation support (Aramco/Contractor display-only), clearer Dashboard status summary, Zone Map legend labels, cleanup. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. All zones and locations are created manually from the app UI — no demo/seed data. Supports zone types (General, Alert/Danger, Hot, Warm, Safe) with distinct map visualization. Full CRUD for zones and locations with edit/delete. Map auto-centers on configured data. Phase 1-3 features complete: auth, alerts, emergency modes (Shelter In/Blackout), personnel tracking, wind/hazard overlays, receipt confirmation with need_help/safe responses.
 
 ## Stack
 
@@ -58,7 +58,7 @@ shared/
 ## Database Schema
 
 - **users**: id, username, password, name, role (admin/eco/supervisor/user), badgeNumber (text, nullable), affiliation (aramco/contractor, nullable, display-only), zoneId (FK zones, nullable), locationId (FK locations, nullable)
-- **zones**: id, name, description, polygon (jsonb), color
+- **zones**: id, name, description, polygon (jsonb), color, zoneType (general/alert/hot/warm/safe)
 - **locations**: id, name, latitude, longitude, zoneId (FK zones)
 - **alerts**: id, title, description, severity, status, zoneId (FK zones), createdBy (FK users)
 - **emergency_modes**: id, type (shelter_in/blackout), status (active/cleared), activatedBy (FK users), activatedAt, clearedAt, clearedBy (FK users)

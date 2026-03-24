@@ -9,56 +9,73 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { apiRequest, queryClient, getQueryFn } from "@/lib/query-client";
-import { useAppStore } from "@/lib/store";
-import type { Zone } from "@shared/schema";
+import type { Zone, Location } from "@shared/schema";
 
 export default function CreateLocationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const addLocation = useAppStore((s) => s.addLocation);
-  const setZones = useAppStore((s) => s.setZones);
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEditing = !!params.editId;
 
-  const [name, setName] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  const { data: zoneData } = useQuery<Zone[]>({
+  const { data: zones } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
     queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
-  useEffect(() => {
-    if (zoneData && Array.isArray(zoneData)) setZones(zoneData);
-  }, [zoneData]);
+  const { data: existingLoc } = useQuery<Location>({
+    queryKey: ["/api/locations", params.editId],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: isEditing,
+  });
 
-  const safeZones = Array.isArray(zoneData) ? zoneData : [];
+  const [name, setName] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [zoneId, setZoneId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (isEditing && existingLoc && !initialized) {
+      setName(existingLoc.name);
+      setLatitude(String(existingLoc.latitude));
+      setLongitude(String(existingLoc.longitude));
+      setZoneId(existingLoc.zoneId);
+      setInitialized(true);
+    }
+  }, [isEditing, existingLoc, initialized]);
+
+  const safeZones = zones || [];
 
   const mutation = useMutation({
     mutationFn: async () => {
       const lat = parseFloat(latitude);
       const lng = parseFloat(longitude);
-      if (isNaN(lat) || isNaN(lng)) throw new Error("Invalid coordinates");
-      if (lat < -90 || lat > 90) throw new Error("Latitude must be -90 to 90");
-      if (lng < -180 || lng > 180) throw new Error("Longitude must be -180 to 180");
+      if (isNaN(lat) || lat < -90 || lat > 90) throw new Error("Latitude must be between -90 and 90");
+      if (isNaN(lng) || lng < -180 || lng > 180) throw new Error("Longitude must be between -180 and 180");
 
-      const res = await apiRequest("POST", "/api/locations", {
+      const body: any = {
         name: name.trim(),
         latitude: lat,
         longitude: lng,
-        zoneId: selectedZoneId,
-      });
-      return res.json();
+      };
+      if (zoneId) body.zoneId = zoneId;
+
+      if (isEditing) {
+        const res = await apiRequest("PUT", `/api/locations/${params.editId}`, body);
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/locations", body);
+        return res.json();
+      }
     },
-    onSuccess: (data) => {
-      addLocation(data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/locations"] });
       router.back();
     },
@@ -67,7 +84,7 @@ export default function CreateLocationScreen() {
     },
   });
 
-  const handleCreate = () => {
+  const handleSave = () => {
     if (!name.trim()) {
       setError("Location name is required");
       return;
@@ -102,80 +119,67 @@ export default function CreateLocationScreen() {
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="e.g. Main Entrance"
+          placeholder="e.g. Assembly Point A"
           placeholderTextColor="#999"
         />
       </View>
 
-      <View style={styles.row}>
-        <View style={[styles.inputGroup, { flex: 1 }]}>
-          <Text style={styles.label}>Latitude *</Text>
-          <TextInput
-            style={styles.input}
-            value={latitude}
-            onChangeText={setLatitude}
-            placeholder="-33.8688"
-            placeholderTextColor="#999"
-            keyboardType="numeric"
-          />
-        </View>
-        <View style={[styles.inputGroup, { flex: 1 }]}>
-          <Text style={styles.label}>Longitude *</Text>
-          <TextInput
-            style={styles.input}
-            value={longitude}
-            onChangeText={setLongitude}
-            placeholder="151.2093"
-            placeholderTextColor="#999"
-            keyboardType="numeric"
-          />
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Coordinates *</Text>
+        <Text style={styles.hint}>
+          Enter latitude and longitude. Tip: Long-press on Google Maps to copy coordinates.
+        </Text>
+        <View style={styles.coordRow}>
+          <View style={styles.coordInput}>
+            <Text style={styles.coordLabel}>Latitude</Text>
+            <TextInput
+              style={styles.input}
+              value={latitude}
+              onChangeText={setLatitude}
+              placeholder="24.6333"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.coordInput}>
+            <Text style={styles.coordLabel}>Longitude</Text>
+            <TextInput
+              style={styles.input}
+              value={longitude}
+              onChangeText={setLongitude}
+              placeholder="46.7167"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+            />
+          </View>
         </View>
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Zone (optional)</Text>
-        <View style={styles.zoneList}>
-          <Pressable
-            style={[
-              styles.zoneOption,
-              selectedZoneId === null && styles.zoneSelected,
-            ]}
-            onPress={() => setSelectedZoneId(null)}
-          >
-            <Text
-              style={[
-                styles.zoneOptionText,
-                selectedZoneId === null && styles.zoneSelectedText,
-              ]}
-            >
-              No Zone
-            </Text>
-          </Pressable>
-          {safeZones.map((zone) => (
+      {safeZones.length > 0 ? (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Zone (optional)</Text>
+          <View style={styles.zoneList}>
             <Pressable
-              key={zone.id}
-              style={[
-                styles.zoneOption,
-                selectedZoneId === zone.id && styles.zoneSelected,
-              ]}
-              onPress={() => setSelectedZoneId(zone.id)}
+              style={[styles.zoneOption, !zoneId && styles.zoneSelected]}
+              onPress={() => setZoneId(null)}
             >
-              <View
-                style={[styles.zoneDot, { backgroundColor: zone.color || "#FF0000" }]}
-              />
-              <Text
-                style={[
-                  styles.zoneOptionText,
-                  selectedZoneId === zone.id && styles.zoneSelectedText,
-                ]}
-                numberOfLines={1}
-              >
-                {zone.name}
-              </Text>
+              <Text style={[styles.zoneText, !zoneId && styles.zoneTextSelected]}>None</Text>
             </Pressable>
-          ))}
+            {safeZones.map((z) => (
+              <Pressable
+                key={z.id}
+                style={[styles.zoneOption, zoneId === z.id && styles.zoneSelected]}
+                onPress={() => setZoneId(z.id)}
+              >
+                <View style={[styles.zoneDot, { backgroundColor: z.color || "#FF0000" }]} />
+                <Text style={[styles.zoneText, zoneId === z.id && styles.zoneTextSelected]}>
+                  {z.name}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <Pressable
         style={({ pressed }) => [
@@ -183,13 +187,13 @@ export default function CreateLocationScreen() {
           pressed && { opacity: 0.9 },
           mutation.isPending && { opacity: 0.6 },
         ]}
-        onPress={handleCreate}
+        onPress={handleSave}
         disabled={mutation.isPending}
       >
         {mutation.isPending ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Add Location</Text>
+          <Text style={styles.buttonText}>{isEditing ? "Save Changes" : "Create Location"}</Text>
         )}
       </Pressable>
     </ScrollView>
@@ -226,6 +230,11 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.light.text,
   },
+  hint: {
+    fontSize: 12,
+    color: Colors.light.tabIconDefault,
+    lineHeight: 18,
+  },
   input: {
     backgroundColor: Colors.light.surface,
     borderRadius: 10,
@@ -235,22 +244,32 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.border,
     color: Colors.light.text,
   },
-  row: {
+  coordRow: {
     flexDirection: "row" as const,
     gap: 12,
+    marginTop: 4,
+  },
+  coordInput: {
+    flex: 1,
+    gap: 4,
+  },
+  coordLabel: {
+    fontSize: 12,
+    color: Colors.light.tabIconDefault,
   },
   zoneList: {
-    gap: 8,
+    gap: 6,
+    marginTop: 4,
   },
   zoneOption: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 8,
+    gap: 10,
     padding: 12,
-    backgroundColor: Colors.light.surface,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: Colors.light.border,
+    backgroundColor: Colors.light.surface,
   },
   zoneSelected: {
     borderColor: Colors.light.tint,
@@ -261,12 +280,11 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
-  zoneOptionText: {
-    fontSize: 15,
-    color: Colors.light.text,
-    flex: 1,
+  zoneText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
   },
-  zoneSelectedText: {
+  zoneTextSelected: {
     color: Colors.light.tint,
     fontWeight: "600" as const,
   },

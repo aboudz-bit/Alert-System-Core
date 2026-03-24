@@ -3,6 +3,7 @@ import { pgTable, text, varchar, timestamp, jsonb, real, pgEnum, unique } from "
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const zoneTypeEnum = pgEnum("zone_type", ["general", "alert", "hot", "warm", "safe"]);
 export const affiliationEnum = pgEnum("user_affiliation", ["aramco", "contractor"]);
 export const roleEnum = pgEnum("user_role", ["admin", "eco", "supervisor", "user"]);
 export const alertStatusEnum = pgEnum("alert_status", ["active", "cleared"]);
@@ -33,6 +34,7 @@ export const zones = pgTable("zones", {
   description: text("description").notNull().default(""),
   polygon: jsonb("polygon").notNull().default([]),
   color: text("color").notNull().default("#FF0000"),
+  zoneType: zoneTypeEnum("zone_type").notNull().default("general"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -93,6 +95,7 @@ export const insertZoneSchema = createInsertSchema(zones).pick({
   description: true,
   polygon: true,
   color: true,
+  zoneType: true,
 });
 
 export const insertLocationSchema = createInsertSchema(locations).pick({
@@ -166,6 +169,7 @@ export type EmergencyModeType = "shelter_in" | "blackout";
 export type ResponseStatus = "safe" | "need_help";
 export type UserRole = "admin" | "eco" | "supervisor" | "user";
 export type UserAffiliation = "aramco" | "contractor";
+export type ZoneType = "general" | "alert" | "hot" | "warm" | "safe";
 export type WindCondition = typeof windConditions.$inferSelect;
 
 export const setResponseStatusSchema = z.object({

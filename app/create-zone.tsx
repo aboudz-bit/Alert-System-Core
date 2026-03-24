@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,26 +9,59 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { useMutation } from "@tanstack/react-query";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
-import { apiRequest, queryClient } from "@/lib/query-client";
-import { useAppStore } from "@/lib/store";
+import { apiRequest, queryClient, getQueryFn } from "@/lib/query-client";
+import type { Zone } from "@shared/schema";
 
-const PRESET_COLORS = ["#FF0000", "#FF9500", "#007AFF", "#34C759", "#AF52DE", "#FF2D55"];
+const PRESET_COLORS = ["#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF", "#AF52DE", "#8E8E93"];
+
+const ZONE_TYPES = [
+  { value: "general", label: "General", icon: "layers" as const, color: "#007AFF" },
+  { value: "alert", label: "Alert / Danger", icon: "alert-triangle" as const, color: "#FF3B30" },
+  { value: "hot", label: "Hot Zone", icon: "thermometer" as const, color: "#FF9500" },
+  { value: "warm", label: "Warm Zone", icon: "sun" as const, color: "#FFCC00" },
+  { value: "safe", label: "Safe Zone", icon: "shield" as const, color: "#34C759" },
+];
 
 export default function CreateZoneScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const addZone = useAppStore((s) => s.addZone);
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEditing = !!params.editId;
+
+  const { data: existingZone } = useQuery<Zone>({
+    queryKey: ["/api/zones", params.editId],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    enabled: isEditing,
+  });
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [color, setColor] = useState("#FF0000");
+  const [color, setColor] = useState("#FF3B30");
+  const [zoneType, setZoneType] = useState("general");
   const [pointsText, setPointsText] = useState("");
   const [error, setError] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (isEditing && existingZone && !initialized) {
+      setName(existingZone.name);
+      setDescription(existingZone.description || "");
+      setColor(existingZone.color || "#FF3B30");
+      setZoneType((existingZone as any).zoneType || "general");
+      const poly = Array.isArray(existingZone.polygon) ? existingZone.polygon : [];
+      setPointsText(
+        poly
+          .map((p: any) => `${p.latitude}, ${p.longitude}`)
+          .join("\n")
+      );
+      setInitialized(true);
+    }
+  }, [isEditing, existingZone, initialized]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -46,18 +79,26 @@ export default function CreateZoneScreen() {
           if (lng < -180 || lng > 180) throw new Error("Longitude must be -180 to 180");
           polygon.push({ latitude: lat, longitude: lng });
         }
+        if (polygon.length < 3) throw new Error("A zone polygon needs at least 3 points");
       }
 
-      const res = await apiRequest("POST", "/api/zones", {
+      const body = {
         name: name.trim(),
         description: description.trim(),
         polygon,
         color,
-      });
-      return res.json();
+        zoneType,
+      };
+
+      if (isEditing) {
+        const res = await apiRequest("PUT", `/api/zones/${params.editId}`, body);
+        return res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/zones", body);
+        return res.json();
+      }
     },
-    onSuccess: (data) => {
-      addZone(data);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/zones"] });
       router.back();
     },
@@ -66,7 +107,7 @@ export default function CreateZoneScreen() {
     },
   });
 
-  const handleCreate = () => {
+  const handleSave = () => {
     if (!name.trim()) {
       setError("Zone name is required");
       return;
@@ -97,7 +138,7 @@ export default function CreateZoneScreen() {
           style={styles.input}
           value={name}
           onChangeText={setName}
-          placeholder="e.g. Building A"
+          placeholder="e.g. Admin Building"
           placeholderTextColor="#999"
         />
       </View>
@@ -113,6 +154,32 @@ export default function CreateZoneScreen() {
           multiline
           numberOfLines={3}
         />
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>Zone Type</Text>
+        <View style={styles.typeGrid}>
+          {ZONE_TYPES.map((t) => (
+            <Pressable
+              key={t.value}
+              style={[
+                styles.typeOption,
+                zoneType === t.value && { borderColor: t.color, backgroundColor: `${t.color}15` },
+              ]}
+              onPress={() => setZoneType(t.value)}
+            >
+              <Feather name={t.icon} size={18} color={zoneType === t.value ? t.color : "#8E8E93"} />
+              <Text
+                style={[
+                  styles.typeLabel,
+                  zoneType === t.value && { color: t.color, fontWeight: "600" as const },
+                ]}
+              >
+                {t.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       <View style={styles.inputGroup}>
@@ -135,16 +202,18 @@ export default function CreateZoneScreen() {
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Polygon Points</Text>
         <Text style={styles.hint}>
-          One point per line: latitude, longitude
+          One point per line: latitude, longitude{"\n"}
+          Minimum 3 points to form a polygon.{"\n"}
+          Tip: Use Google Maps to find coordinates.
         </Text>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, { minHeight: 120 }]}
           value={pointsText}
           onChangeText={setPointsText}
-          placeholder={"-33.8688, 151.2093\n-33.8700, 151.2100\n-33.8710, 151.2080"}
+          placeholder={"24.6333, 46.7167\n24.6340, 46.7175\n24.6328, 46.7180"}
           placeholderTextColor="#999"
           multiline
-          numberOfLines={5}
+          numberOfLines={6}
         />
       </View>
 
@@ -154,13 +223,13 @@ export default function CreateZoneScreen() {
           pressed && { opacity: 0.9 },
           mutation.isPending && { opacity: 0.6 },
         ]}
-        onPress={handleCreate}
+        onPress={handleSave}
         disabled={mutation.isPending}
       >
         {mutation.isPending ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Create Zone</Text>
+          <Text style={styles.buttonText}>{isEditing ? "Save Changes" : "Create Zone"}</Text>
         )}
       </Pressable>
     </ScrollView>
@@ -200,6 +269,7 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 12,
     color: Colors.light.tabIconDefault,
+    lineHeight: 18,
   },
   input: {
     backgroundColor: Colors.light.surface,
@@ -213,6 +283,24 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 80,
     textAlignVertical: "top" as const,
+  },
+  typeGrid: {
+    gap: 8,
+    marginTop: 4,
+  },
+  typeOption: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.light.border,
+    backgroundColor: Colors.light.surface,
+  },
+  typeLabel: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
   },
   colorRow: {
     flexDirection: "row" as const,

@@ -30,6 +30,14 @@ const PERSONNEL_COLORS: Record<PersonnelMarker["status"], string> = {
   no_reply: "#8E8E93",
 };
 
+const ZONE_TYPE_FILL: Record<string, { fill: string; stroke: string }> = {
+  general: { fill: "33", stroke: "" },
+  alert: { fill: "#FF3B3044", stroke: "#FF3B30" },
+  hot: { fill: "#FF950044", stroke: "#FF9500" },
+  warm: { fill: "#FFCC0033", stroke: "#FFCC00" },
+  safe: { fill: "#34C75933", stroke: "#34C759" },
+};
+
 function isValidPolygon(polygon: unknown): polygon is Array<{ latitude: number; longitude: number }> {
   if (!Array.isArray(polygon)) return false;
   if (polygon.length < 3) return false;
@@ -144,6 +152,58 @@ const markerStyles = StyleSheet.create({
   },
 });
 
+function computeInitialRegion(
+  zones: Zone[],
+  locations: Array<{ latitude: number; longitude: number }>
+) {
+  const allPoints: Array<{ latitude: number; longitude: number }> = [];
+
+  for (const z of zones) {
+    if (isValidPolygon(z.polygon)) {
+      for (const p of z.polygon as Array<{ latitude: number; longitude: number }>) {
+        allPoints.push(p);
+      }
+    }
+  }
+
+  for (const loc of locations) {
+    if (isValidCoord(loc.latitude, loc.longitude)) {
+      allPoints.push({ latitude: loc.latitude, longitude: loc.longitude });
+    }
+  }
+
+  if (allPoints.length === 0) {
+    return {
+      latitude: 24.7136,
+      longitude: 46.6753,
+      latitudeDelta: 2,
+      longitudeDelta: 2,
+    };
+  }
+
+  let minLat = 90;
+  let maxLat = -90;
+  let minLng = 180;
+  let maxLng = -180;
+
+  for (const p of allPoints) {
+    if (p.latitude < minLat) minLat = p.latitude;
+    if (p.latitude > maxLat) maxLat = p.latitude;
+    if (p.longitude < minLng) minLng = p.longitude;
+    if (p.longitude > maxLng) maxLng = p.longitude;
+  }
+
+  const latDelta = Math.max((maxLat - minLat) * 1.5, 0.005);
+  const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.005);
+
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLng + maxLng) / 2,
+    latitudeDelta: latDelta,
+    longitudeDelta: lngDelta,
+  };
+}
+
 function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData, personnel }: NativeMapProps) {
   const safeZones = useMemo(
     () => (zones || []).filter((z) => z && isValidPolygon(z.polygon)),
@@ -159,12 +219,18 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
   );
   const safeAlertZoneIds = alertZoneIds || EMPTY_SET;
 
+  const initialRegion = useMemo(
+    () => computeInitialRegion(zones || [], safeLocations),
+    [zones, safeLocations]
+  );
+
   const hazardCones = useMemo(() => {
     if (!windData || windData.speed <= 0) return [];
     const cones: Array<{ id: string; polygon: Array<{ latitude: number; longitude: number }> }> = [];
 
     for (const zone of safeZones) {
-      if (!safeAlertZoneIds.has(zone.id)) continue;
+      const zt = (zone as any).zoneType || "general";
+      if (!safeAlertZoneIds.has(zone.id) && zt !== "alert" && zt !== "hot") continue;
       const poly = zone.polygon as Array<{ latitude: number; longitude: number }>;
       const centroid = computePolygonCentroid(poly);
       const cone = computeHazardCone(centroid, windData.direction, windData.speed);
@@ -178,24 +244,39 @@ function NativeMapInner({ zones, locations, activeAlerts, alertZoneIds, windData
   return (
     <MapView
       style={{ flex: 1 }}
-      initialRegion={{
-        latitude: -33.8688,
-        longitude: 151.2093,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }}
+      initialRegion={initialRegion}
       showsUserLocation={false}
     >
       {safeZones.map((zone) => {
         const poly = zone.polygon as Array<{ latitude: number; longitude: number }>;
         const hasAlert = safeAlertZoneIds.has(zone.id);
+        const zt = (zone as any).zoneType || "general";
+        const typeStyle = ZONE_TYPE_FILL[zt] || ZONE_TYPE_FILL.general;
+
+        let fillColor: string;
+        let strokeColor: string;
+        let strokeWidth = 2;
+
+        if (hasAlert) {
+          fillColor = "#FF3B3044";
+          strokeColor = "#FF3B30";
+          strokeWidth = 3;
+        } else if (zt !== "general" && typeStyle.stroke) {
+          fillColor = typeStyle.fill;
+          strokeColor = typeStyle.stroke;
+          strokeWidth = 2;
+        } else {
+          fillColor = `${zone.color || "#FF0000"}33`;
+          strokeColor = zone.color || "#FF0000";
+        }
+
         return (
           <Polygon
             key={zone.id}
             coordinates={poly}
-            fillColor={hasAlert ? "#FF3B3044" : `${zone.color || "#FF0000"}33`}
-            strokeColor={hasAlert ? "#FF3B30" : (zone.color || "#FF0000")}
-            strokeWidth={hasAlert ? 3 : 2}
+            fillColor={fillColor}
+            strokeColor={strokeColor}
+            strokeWidth={strokeWidth}
           />
         );
       })}

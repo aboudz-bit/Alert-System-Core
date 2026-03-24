@@ -7,14 +7,15 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  Alert as RNAlert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useAppStore, selectLocations, selectZones } from "@/lib/store";
-import { getQueryFn } from "@/lib/query-client";
+import { getQueryFn, apiRequest, queryClient } from "@/lib/query-client";
 import type { Location, Zone } from "@shared/schema";
 
 export default function LocationsScreen() {
@@ -46,26 +47,71 @@ export default function LocationsScreen() {
   const safeLocations = locations || [];
   const safeZones = zones || [];
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/locations/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/locations"] });
+    },
+  });
+
+  const handleDelete = (loc: Location) => {
+    if (Platform.OS === "web") {
+      if (confirm(`Delete location "${loc.name}"?`)) {
+        deleteMutation.mutate(loc.id);
+      }
+    } else {
+      RNAlert.alert(
+        "Delete Location",
+        `Delete "${loc.name}"? This cannot be undone.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: () => deleteMutation.mutate(loc.id) },
+        ]
+      );
+    }
+  };
+
   const getZoneName = (zoneId: string | null): string => {
     if (!zoneId) return "No zone";
     const zone = safeZones.find((z) => z.id === zoneId);
     return zone?.name || "Unknown zone";
   };
 
+  const getZoneColor = (zoneId: string | null): string => {
+    if (!zoneId) return Colors.light.tabIconDefault;
+    const zone = safeZones.find((z) => z.id === zoneId);
+    return zone?.color || Colors.light.tabIconDefault;
+  };
+
   const renderLocation = ({ item }: { item: Location }) => (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={() => router.push(`/create-location?editId=${item.id}`)}
+    >
       <View style={styles.iconWrap}>
         <Feather name="map-pin" size={20} color={Colors.light.tint} />
       </View>
       <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{item.name || "Unnamed"}</Text>
+        <Text style={styles.cardTitle} numberOfLines={1}>{item.name || "Unnamed"}</Text>
         <Text style={styles.cardMeta}>
           {typeof item.latitude === "number" ? item.latitude.toFixed(4) : "?"},{" "}
           {typeof item.longitude === "number" ? item.longitude.toFixed(4) : "?"}
         </Text>
-        <Text style={styles.cardZone}>{getZoneName(item.zoneId)}</Text>
+        <View style={styles.zoneRow}>
+          <View style={[styles.zoneDot, { backgroundColor: getZoneColor(item.zoneId) }]} />
+          <Text style={styles.cardZone}>{getZoneName(item.zoneId)}</Text>
+        </View>
       </View>
-    </View>
+      <Pressable
+        style={styles.deleteBtn}
+        onPress={() => handleDelete(item)}
+        hitSlop={8}
+      >
+        <Feather name="trash-2" size={18} color={Colors.light.danger} />
+      </Pressable>
+    </Pressable>
   );
 
   return (
@@ -78,7 +124,7 @@ export default function LocationsScreen() {
         <View style={styles.center}>
           <Feather name="map-pin" size={48} color={Colors.light.tabIconDefault} />
           <Text style={styles.emptyTitle}>No Locations</Text>
-          <Text style={styles.emptyText}>Add a location to get started</Text>
+          <Text style={styles.emptyText}>Tap + to add a location</Text>
         </View>
       ) : (
         <FlatList
@@ -135,7 +181,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.light.surface,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: 12,
@@ -144,7 +190,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 1,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   iconWrap: {
     width: 40,
@@ -156,7 +202,7 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   cardTitle: {
     fontSize: 16,
@@ -167,9 +213,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.light.tabIconDefault,
   },
+  zoneRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 5,
+  },
+  zoneDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   cardZone: {
     fontSize: 13,
     color: Colors.light.textSecondary,
+  },
+  deleteBtn: {
+    padding: 10,
   },
   fab: {
     position: "absolute" as const,
