@@ -101,9 +101,9 @@ author = "agent"
 mode = "sequential"
 
 [workflows.workflow.metadata]
-outputType = "console"
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash -c 'for i in 1 2 3 4 5; do fuser -k 8081/tcp 2>/dev/null; sleep 2; if ! fuser 8081/tcp 2>/dev/null; then break; fi; done; npm run expo:dev'"
+args = "bash -c 'for i in 1 2 3 4 5; do fuser -k 8081/tcp 2>/dev/null; sleep 2; if ! fuser 8081/tcp 2>/dev/null; then break; fi; done; EXPO_PACKAGER_PROXY_URL=https://$REPLIT_DEV_DOMAIN REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN:5000 npx expo start --localhost --clear --port 8081'"
 waitForPort = 8081
