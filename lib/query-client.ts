@@ -1,35 +1,64 @@
 import { fetch } from "expo/fetch";
+import { Platform } from "react-native";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+
+let _loggedApiUrl = false;
 
 /**
  * Gets the base URL for the Express API server.
- * Strips any non-standard port from the domain since the Replit HTTPS proxy
- * routes to the correct internal port via the standard HTTPS port (443).
- * Mobile devices cannot reach internal ports like :5000 directly.
+ *
+ * Strategy:
+ *  1. Web — use window.location.origin (same origin as the served app).
+ *     In production Express serves both the app and the API.
+ *     In dev web preview, the Replit proxy routes to the right port.
+ *  2. Native — use EXPO_PUBLIC_DOMAIN env var with the port stripped
+ *     (the Replit HTTPS proxy handles internal port routing).
+ *  3. If nothing is available, fall back to empty string so fetch()
+ *     uses a relative path (works when same-origin).
  */
 export function getApiUrl(): string {
-  let host = process.env.EXPO_PUBLIC_DOMAIN;
+  let base: string;
 
-  if (!host) {
-    throw new Error("EXPO_PUBLIC_DOMAIN is not set");
+  if (
+    Platform.OS === "web" &&
+    typeof window !== "undefined" &&
+    window.location?.origin &&
+    window.location.origin !== "null"
+  ) {
+    // Web: same-origin — works in production and in Replit web preview
+    base = window.location.origin;
+  } else if (process.env.EXPO_PUBLIC_DOMAIN) {
+    // Native: use the configured domain, strip port suffix
+    const host = process.env.EXPO_PUBLIC_DOMAIN.replace(/:\d+$/, "");
+    base = `https://${host}`;
+  } else {
+    // Last resort: relative paths (only works if same-origin)
+    base = "";
   }
 
-  // Strip port suffix (e.g. ":5000") — the Replit HTTPS proxy handles routing
-  // to the correct internal port. Direct port access only works inside the
-  // container, not from external mobile devices.
-  const hostWithoutPort = host.replace(/:\d+$/, "");
+  if (!_loggedApiUrl) {
+    _loggedApiUrl = true;
+    console.log(`[API] base URL: ${base || "(relative)"}`);
+  }
 
-  const url = new URL(`https://${hostWithoutPort}`);
+  return base;
+}
 
-  return url.href;
+/**
+ * Build a full URL for an API route.
+ * When baseUrl is empty, returns the route as-is (relative fetch).
+ */
+export function buildApiUrl(route: string): string {
+  const base = getApiUrl();
+  if (!base) return route;
+  return new URL(route, base).toString();
 }
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
 
-    // Detect HTML error pages (e.g. proxy 404) and return a clean message
-    // instead of dumping raw HTML into the UI.
+    // Detect HTML error pages (e.g. proxy 404/502) and return a clean message
     if (text.includes("<!DOCTYPE") || text.includes("<html")) {
       throw new Error(
         `${res.status}: Server not reachable. Check that the backend is running.`
@@ -57,10 +86,9 @@ export async function apiRequest(
   route: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const baseUrl = getApiUrl();
-  const url = new URL(route, baseUrl);
+  const url = buildApiUrl(route);
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -77,10 +105,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const baseUrl = getApiUrl();
-    const url = new URL(queryKey.join("/") as string, baseUrl);
+    const path = queryKey.join("/") as string;
+    const url = buildApiUrl(path);
 
-    const res = await fetch(url.toString(), {
+    const res = await fetch(url, {
       credentials: "include",
     });
 

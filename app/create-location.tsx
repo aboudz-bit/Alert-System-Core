@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -17,11 +17,34 @@ import Colors from "@/constants/colors";
 import { apiRequest, queryClient, getQueryFn } from "@/lib/query-client";
 import type { Zone, Location } from "@shared/schema";
 
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+
+if (Platform.OS !== "web") {
+  try {
+    const maps = require("react-native-maps");
+    MapView = maps.default;
+    Marker = maps.Marker;
+    PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+  } catch {
+    // react-native-maps not available
+  }
+}
+
+const DEFAULT_REGION = {
+  latitude: 24.7136,
+  longitude: 46.6753,
+  latitudeDelta: 0.5,
+  longitudeDelta: 0.5,
+};
+
 export default function CreateLocationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ editId?: string }>();
   const isEditing = !!params.editId;
+  const mapRef = useRef<any>(null);
 
   const { data: zones } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
@@ -41,6 +64,27 @@ export default function CreateLocationScreen() {
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [markerCoord, setMarkerCoord] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [manualExpanded, setManualExpanded] = useState(false);
+
+  const showMap = Platform.OS !== "web" && MapView !== null;
+
+  const animateToCoord = (lat: number, lng: number) => {
+    if (mapRef.current?.animateToRegion) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        500
+      );
+    }
+  };
 
   const handleUseMyLocation = async () => {
     setGpsLoading(true);
@@ -54,8 +98,12 @@ export default function CreateLocationScreen() {
         }
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            setLatitude(pos.coords.latitude.toFixed(6));
-            setLongitude(pos.coords.longitude.toFixed(6));
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            setLatitude(lat.toFixed(6));
+            setLongitude(lng.toFixed(6));
+            setMarkerCoord({ latitude: lat, longitude: lng });
+            animateToCoord(lat, lng);
             setGpsLoading(false);
           },
           () => {
@@ -66,19 +114,25 @@ export default function CreateLocationScreen() {
         );
         return;
       }
-      const Location = await import("expo-location");
-      const { status } = await Location.getForegroundPermissionsAsync();
+      const LocationModule = await import("expo-location");
+      const { status } = await LocationModule.getForegroundPermissionsAsync();
       if (status !== "granted") {
-        const perm = await Location.requestForegroundPermissionsAsync();
+        const perm = await LocationModule.requestForegroundPermissionsAsync();
         if (perm.status !== "granted") {
           setError("Location permission not granted");
           setGpsLoading(false);
           return;
         }
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setLatitude(loc.coords.latitude.toFixed(6));
-      setLongitude(loc.coords.longitude.toFixed(6));
+      const loc = await LocationModule.getCurrentPositionAsync({
+        accuracy: LocationModule.Accuracy.High,
+      });
+      const lat = loc.coords.latitude;
+      const lng = loc.coords.longitude;
+      setLatitude(lat.toFixed(6));
+      setLongitude(lng.toFixed(6));
+      setMarkerCoord({ latitude: lat, longitude: lng });
+      animateToCoord(lat, lng);
     } catch {
       setError("Could not get current location");
     } finally {
@@ -92,18 +146,49 @@ export default function CreateLocationScreen() {
       setLatitude(String(existingLoc.latitude));
       setLongitude(String(existingLoc.longitude));
       setZoneId(existingLoc.zoneId);
+      const lat = parseFloat(String(existingLoc.latitude));
+      const lng = parseFloat(String(existingLoc.longitude));
+      if (!isNaN(lat) && !isNaN(lng)) {
+        setMarkerCoord({ latitude: lat, longitude: lng });
+      }
       setInitialized(true);
     }
   }, [isEditing, existingLoc, initialized]);
 
   const safeZones = zones || [];
 
+  const initialRegion =
+    isEditing && existingLoc
+      ? {
+          latitude: parseFloat(String(existingLoc.latitude)) || DEFAULT_REGION.latitude,
+          longitude: parseFloat(String(existingLoc.longitude)) || DEFAULT_REGION.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }
+      : DEFAULT_REGION;
+
+  const handleMapPress = (e: any) => {
+    const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
+    setMarkerCoord({ latitude: lat, longitude: lng });
+    setLatitude(lat.toFixed(6));
+    setLongitude(lng.toFixed(6));
+  };
+
+  const handleMarkerDragEnd = (e: any) => {
+    const { latitude: lat, longitude: lng } = e.nativeEvent.coordinate;
+    setMarkerCoord({ latitude: lat, longitude: lng });
+    setLatitude(lat.toFixed(6));
+    setLongitude(lng.toFixed(6));
+  };
+
   const mutation = useMutation({
     mutationFn: async () => {
       const lat = parseFloat(latitude);
       const lng = parseFloat(longitude);
-      if (isNaN(lat) || lat < -90 || lat > 90) throw new Error("Latitude must be between -90 and 90");
-      if (isNaN(lng) || lng < -180 || lng > 180) throw new Error("Longitude must be between -180 and 180");
+      if (isNaN(lat) || lat < -90 || lat > 90)
+        throw new Error("Latitude must be between -90 and 90");
+      if (isNaN(lng) || lng < -180 || lng > 180)
+        throw new Error("Longitude must be between -180 and 180");
 
       const body: any = {
         name: name.trim(),
@@ -169,35 +254,41 @@ export default function CreateLocationScreen() {
         />
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Coordinates *</Text>
-        <Text style={styles.hint}>
-          Enter latitude and longitude. Tip: Long-press on Google Maps to copy coordinates.
-        </Text>
-        <View style={styles.coordRow}>
-          <View style={styles.coordInput}>
-            <Text style={styles.coordLabel}>Latitude</Text>
-            <TextInput
-              style={styles.input}
-              value={latitude}
-              onChangeText={setLatitude}
-              placeholder="24.6333"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
+      {showMap ? (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Pick Location on Map *</Text>
+          <Text style={styles.hint}>
+            Tap the map to place a marker, or drag the marker to adjust.
+          </Text>
+          <View style={styles.mapContainer}>
+            <MapView
+              ref={mapRef}
+              style={styles.map}
+              provider={PROVIDER_GOOGLE}
+              initialRegion={initialRegion}
+              onPress={handleMapPress}
+              showsUserLocation
+              showsMyLocationButton={false}
+            >
+              {markerCoord ? (
+                <Marker
+                  coordinate={markerCoord}
+                  draggable
+                  onDragEnd={handleMarkerDragEnd}
+                  pinColor="red"
+                />
+              ) : null}
+            </MapView>
           </View>
-          <View style={styles.coordInput}>
-            <Text style={styles.coordLabel}>Longitude</Text>
-            <TextInput
-              style={styles.input}
-              value={longitude}
-              onChangeText={setLongitude}
-              placeholder="46.7167"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-          </View>
+          {markerCoord ? (
+            <Text style={styles.coordPreview}>
+              {markerCoord.latitude.toFixed(6)}, {markerCoord.longitude.toFixed(6)}
+            </Text>
+          ) : null}
         </View>
+      ) : null}
+
+      <View style={styles.inputGroup}>
         <Pressable
           style={({ pressed }) => [
             styles.gpsButton,
@@ -215,6 +306,95 @@ export default function CreateLocationScreen() {
           <Text style={styles.gpsButtonText}>Use My Current Location</Text>
         </Pressable>
       </View>
+
+      {showMap ? (
+        <View style={styles.inputGroup}>
+          <Pressable
+            style={styles.collapseToggle}
+            onPress={() => setManualExpanded((prev) => !prev)}
+          >
+            <Feather
+              name={manualExpanded ? "chevron-up" : "chevron-down"}
+              size={16}
+              color={Colors.light.tabIconDefault}
+            />
+            <Text style={styles.collapseToggleText}>Manual coordinates</Text>
+          </Pressable>
+          {manualExpanded ? (
+            <View style={styles.manualSection}>
+              <View style={styles.coordRow}>
+                <View style={styles.coordInput}>
+                  <Text style={styles.coordLabel}>Latitude</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={latitude}
+                    onChangeText={(val) => {
+                      setLatitude(val);
+                      const lat = parseFloat(val);
+                      const lng = parseFloat(longitude);
+                      if (!isNaN(lat) && !isNaN(lng)) {
+                        setMarkerCoord({ latitude: lat, longitude: lng });
+                      }
+                    }}
+                    placeholder="24.6333"
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={styles.coordInput}>
+                  <Text style={styles.coordLabel}>Longitude</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={longitude}
+                    onChangeText={(val) => {
+                      setLongitude(val);
+                      const lat = parseFloat(latitude);
+                      const lng = parseFloat(val);
+                      if (!isNaN(lat) && !isNaN(lng)) {
+                        setMarkerCoord({ latitude: lat, longitude: lng });
+                      }
+                    }}
+                    placeholder="46.7167"
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Coordinates *</Text>
+          <Text style={styles.hint}>
+            Enter latitude and longitude. Tip: Long-press on Google Maps to copy coordinates.
+          </Text>
+          <View style={styles.coordRow}>
+            <View style={styles.coordInput}>
+              <Text style={styles.coordLabel}>Latitude</Text>
+              <TextInput
+                style={styles.input}
+                value={latitude}
+                onChangeText={setLatitude}
+                placeholder="24.6333"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={styles.coordInput}>
+              <Text style={styles.coordLabel}>Longitude</Text>
+              <TextInput
+                style={styles.input}
+                value={longitude}
+                onChangeText={setLongitude}
+                placeholder="46.7167"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+        </View>
+      )}
 
       {safeZones.length > 0 ? (
         <View style={styles.inputGroup}>
@@ -304,6 +484,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.border,
     color: Colors.light.text,
+  },
+  mapContainer: {
+    height: 250,
+    borderRadius: 12,
+    overflow: "hidden" as const,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    marginTop: 4,
+  },
+  map: {
+    flex: 1,
+  },
+  coordPreview: {
+    fontSize: 13,
+    color: Colors.light.tabIconDefault,
+    textAlign: "center" as const,
+    marginTop: 4,
+  },
+  collapseToggle: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    paddingVertical: 8,
+  },
+  collapseToggleText: {
+    fontSize: 14,
+    color: Colors.light.tabIconDefault,
+    fontWeight: "500" as const,
+  },
+  manualSection: {
+    gap: 6,
   },
   coordRow: {
     flexDirection: "row" as const,

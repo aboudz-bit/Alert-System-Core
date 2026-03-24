@@ -20,13 +20,39 @@ interface MenuItem {
   roles: string[];
 }
 
-const MENU_ITEMS: MenuItem[] = [
-  { key: "zones", label: "Zones", icon: "layers", route: "/(tabs)/zones", roles: ["admin", "supervisor"] },
-  { key: "locations", label: "Locations", icon: "map-pin", route: "/(tabs)/locations", roles: ["admin", "supervisor"] },
-  { key: "permissions", label: "Permissions", icon: "shield", route: "/(tabs)/permissions", roles: ["admin"] },
-  { key: "eco", label: "ECO", icon: "radio", route: "/(tabs)/eco", roles: ["admin", "eco"] },
-  { key: "supervisor", label: "Supervisor", icon: "eye", route: "/(tabs)/supervisor", roles: ["admin", "supervisor"] },
-  { key: "settings", label: "Settings", icon: "settings", route: "/(tabs)/settings", roles: ["admin", "eco", "supervisor", "user"] },
+interface MenuSection {
+  title: string;
+  items: MenuItem[];
+}
+
+const MENU_SECTIONS: MenuSection[] = [
+  {
+    title: "Operations",
+    items: [
+      { key: "people", label: "People", icon: "user-check", route: "/(tabs)/people", roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Setup",
+    items: [
+      { key: "zones", label: "Zones", icon: "layers", route: "/(tabs)/zones", roles: ["admin", "supervisor"] },
+      { key: "locations", label: "Locations", icon: "map-pin", route: "/(tabs)/locations", roles: ["admin", "supervisor"] },
+    ],
+  },
+  {
+    title: "Administration",
+    items: [
+      { key: "permissions", label: "Permissions", icon: "shield", route: "/(tabs)/permissions", roles: ["admin"] },
+      { key: "eco", label: "ECO", icon: "radio", route: "/(tabs)/eco", roles: ["admin", "eco"] },
+      { key: "supervisor", label: "Supervisor", icon: "eye", route: "/(tabs)/supervisor", roles: ["admin", "supervisor"] },
+    ],
+  },
+  {
+    title: "Account",
+    items: [
+      { key: "settings", label: "Settings", icon: "settings", route: "/(tabs)/settings", roles: ["admin", "eco", "supervisor", "user"] },
+    ],
+  },
 ];
 
 export default function MoreScreen() {
@@ -34,7 +60,12 @@ export default function MoreScreen() {
   const router = useRouter();
   const role = user?.role || "user";
 
-  const visibleItems = MENU_ITEMS.filter((item) => item.roles.includes(role));
+  const visibleSections = MENU_SECTIONS
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.roles.includes(role)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <ScrollView
@@ -44,25 +75,30 @@ export default function MoreScreen() {
         paddingTop: 16,
       }}
     >
-      <View style={styles.section}>
-        {visibleItems.map((item, idx) => (
-          <Pressable
-            key={item.key}
-            style={[
-              styles.menuRow,
-              idx === 0 && styles.menuRowFirst,
-              idx === visibleItems.length - 1 && styles.menuRowLast,
-            ]}
-            onPress={() => router.push(item.route as any)}
-          >
-            <View style={styles.menuIconWrap}>
-              <Feather name={item.icon} size={18} color={Colors.light.tint} />
-            </View>
-            <Text style={styles.menuLabel}>{item.label}</Text>
-            <Feather name="chevron-right" size={16} color={Colors.light.tabIconDefault} />
-          </Pressable>
-        ))}
-      </View>
+      {visibleSections.map((section) => (
+        <View key={section.title} style={styles.sectionWrapper}>
+          <Text style={styles.sectionHeader}>{section.title.toUpperCase()}</Text>
+          <View style={styles.section}>
+            {section.items.map((item, idx) => (
+              <Pressable
+                key={item.key}
+                style={[
+                  styles.menuRow,
+                  idx === 0 && styles.menuRowFirst,
+                  idx === section.items.length - 1 && styles.menuRowLast,
+                ]}
+                onPress={() => router.push(item.route as any)}
+              >
+                <View style={styles.menuIconWrap}>
+                  <Feather name={item.icon} size={18} color={Colors.light.tint} />
+                </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={Colors.light.tabIconDefault} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ))}
     </ScrollView>
   );
 }
@@ -72,6 +108,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.background,
     paddingHorizontal: 16,
+  },
+  sectionWrapper: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.light.tabIconDefault,
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
   },
   section: {
     backgroundColor: Colors.light.surface,
