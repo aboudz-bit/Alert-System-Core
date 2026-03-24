@@ -24,6 +24,7 @@ interface PersonEntry {
   name: string;
   locationId: string | null;
   receiptStatus: "confirmed" | "not_confirmed" | null;
+  responseStatus: "safe" | "need_help" | null;
 }
 
 interface PeopleResponse {
@@ -38,13 +39,11 @@ function computePersonnelStatus(
   person: PersonEntry,
   emergencyActivatedAt: string | null
 ): PersonnelMarker["status"] {
-  if (person.receiptStatus === "confirmed") return "safe";
-  if (person.receiptStatus === "not_confirmed") {
-    if (emergencyActivatedAt) {
-      const elapsed = Date.now() - new Date(emergencyActivatedAt).getTime();
-      if (elapsed < PENDING_WINDOW_MS) return "pending";
-    }
-    return "no_reply";
+  if (person.responseStatus === "need_help") return "need_help";
+  if (person.responseStatus === "safe") return "safe";
+  if (emergencyActivatedAt) {
+    const elapsed = Date.now() - new Date(emergencyActivatedAt).getTime();
+    if (elapsed < PENDING_WINDOW_MS) return "pending";
   }
   return "no_reply";
 }
@@ -174,14 +173,6 @@ export default function MapScreen() {
 
   const isLoading = zonesLoading || locationsLoading;
 
-  if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={Colors.light.tint} />
-      </View>
-    );
-  }
-
   const statusCounts = useMemo(() => {
     if (!hasEmergency || personnelMarkers.length === 0) return null;
     const counts = { safe: 0, pending: 0, need_help: 0, no_reply: 0 };
@@ -190,6 +181,14 @@ export default function MapScreen() {
     }
     return counts;
   }, [hasEmergency, personnelMarkers]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={Colors.light.tint} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

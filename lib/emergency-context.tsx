@@ -11,6 +11,8 @@ interface ReceiptUser {
   username: string;
   role: string;
   confirmedAt?: string | null;
+  responseStatus?: string | null;
+  respondedAt?: string | null;
 }
 
 interface ReceiptSummary {

@@ -1,0 +1,99 @@
+Next step: implement real need_help support end-to-end.
+
+Current state:
+- Users screen has a Need Help status path
+- Zone Map has a Need Help color path
+- But backend does not yet support a real need_help state
+- So need_help is currently unreachable
+
+We need to complete this properly.
+
+Requirements:
+
+Goal:
+A user must be able to explicitly mark:
+- I am Safe
+- Need Help
+
+This must update the real backend state and flow through:
+- Users screen
+- Zone Map
+- Dashboard
+- emergency summary / counts
+
+Implement:
+
+1) Backend status support
+Add a real emergency response status model for each affected user during active emergency.
+
+Needed states:
+- safe
+- pending
+- need_help
+- no_reply
+
+If you already use receipts, extend the model safely.
+Do not create conflicting duplicate state.
+
+2) User action UI
+During active emergency, user must see clear actions:
+- I am Safe
+- Need Help
+
+This is separate from:
+- Confirm Receipt
+
+Meaning:
+- Confirm Receipt = I received the emergency notice
+- I am Safe / Need Help = my condition/status
+
+Do not merge these concepts.
+
+3) Status propagation
+Once a user selects Need Help:
+- Users screen must show red
+- Zone Map marker must show red
+- Dashboard counts must update
+- Summary counts must update
+
+Once a user selects I am Safe:
+- Users screen must show green
+- Zone Map marker must show green
+- Dashboard counts must update
+
+4) Pending / No Reply logic
+- pending = emergency active, user has not responded yet, still within allowed response window
+- no_reply = emergency active, user still has not responded, response window expired
+
+Keep this logic consistent with the existing monitor.
+
+5) Safety and architecture
+- preserve EmergencyProvider as single emergency source
+- do not create a second emergency-state system
+- do not break receipts
+- do not break shelter / blackout
+- do not break alarm logic
+- no crashes
+- no loops
+- no unsafe store resets
+- all arrays default to []
+- no non-null assertions
+
+6) UI requirements
+Users screen:
+- must support filtering by:
+  All / Safe / Pending / Need Help / No Reply
+
+Zone Map:
+- personnel marker colors must reflect real backend status
+
+Dashboard:
+- counts must reflect real backend status
+
+After implementation report:
+1) files changed
+2) backend model used for response status
+3) how Confirm Receipt stays separate from Safe / Need Help
+4) how pending / no_reply are computed
+5) where Users / Zone Map / Dashboard were updated
+6) how stability was protected

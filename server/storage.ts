@@ -54,6 +54,7 @@ export interface IStorage {
   clearEmergencyMode(id: string, clearedBy: string): Promise<EmergencyMode | undefined>;
 
   confirmReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt>;
+  setResponseStatus(emergencyModeId: string, userId: string, status: "safe" | "need_help"): Promise<EmergencyReceipt>;
   getReceiptsByMode(emergencyModeId: string): Promise<EmergencyReceipt[]>;
   getUserReceipt(emergencyModeId: string, userId: string): Promise<EmergencyReceipt | undefined>;
 
@@ -229,6 +230,24 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getUserReceipt(emergencyModeId, userId);
     if (!existing) throw new Error("Failed to confirm receipt");
     return existing;
+  }
+
+  async setResponseStatus(emergencyModeId: string, userId: string, status: "safe" | "need_help"): Promise<EmergencyReceipt> {
+    const existing = await this.getUserReceipt(emergencyModeId, userId);
+    const now = new Date();
+    if (existing) {
+      const result = await db
+        .update(emergencyReceipts)
+        .set({ responseStatus: status, respondedAt: now })
+        .where(eq(emergencyReceipts.id, existing.id))
+        .returning();
+      return result[0];
+    }
+    const result = await db
+      .insert(emergencyReceipts)
+      .values({ emergencyModeId, userId, confirmedAt: now, responseStatus: status, respondedAt: now })
+      .returning();
+    return result[0];
   }
 
   async getReceiptsByMode(emergencyModeId: string): Promise<EmergencyReceipt[]> {

@@ -66,12 +66,20 @@ export default function DashboardScreen() {
   );
 
   const receiptStats = useMemo(() => {
-    if (!receiptSummary) return { total: 0, confirmed: 0, notConfirmed: 0, pending: 0 };
-    const confirmed = (receiptSummary.confirmed || []).length;
-    const notConfirmed = (receiptSummary.notConfirmed || []).length;
+    if (!receiptSummary) return { total: 0, confirmed: 0, notConfirmed: 0, safe: 0, needHelp: 0, pending: 0, noReply: 0 };
+    const confirmedList = receiptSummary.confirmed || [];
+    const notConfirmedList = receiptSummary.notConfirmed || [];
+    const confirmed = confirmedList.length;
+    const notConfirmed = notConfirmedList.length;
     const total = receiptSummary.total || 0;
-    const pending = total - confirmed;
-    return { total, confirmed, notConfirmed, pending };
+    let safe = 0;
+    let needHelp = 0;
+    for (const u of confirmedList) {
+      if ((u as { responseStatus?: string | null }).responseStatus === "safe") safe++;
+      else if ((u as { responseStatus?: string | null }).responseStatus === "need_help") needHelp++;
+    }
+    const noResponse = total - safe - needHelp;
+    return { total, confirmed, notConfirmed, safe, needHelp, pending: noResponse, noReply: 0 };
   }, [receiptSummary]);
 
   return (
@@ -118,20 +126,13 @@ export default function DashboardScreen() {
 
       {isPrivileged && hasEmergency ? (
         <View style={styles.receiptSection}>
-          <Text style={styles.sectionTitle}>Receipt Status</Text>
+          <Text style={styles.sectionTitle}>Personnel Status</Text>
           <View style={styles.receiptBar}>
             <View style={styles.receiptItem}>
               <Text style={[styles.receiptNum, { color: Colors.light.success }]}>
-                {receiptStats.confirmed}
+                {receiptStats.safe}
               </Text>
-              <Text style={styles.receiptLbl}>Confirmed</Text>
-            </View>
-            <View style={styles.receiptDivider} />
-            <View style={styles.receiptItem}>
-              <Text style={[styles.receiptNum, { color: Colors.light.danger }]}>
-                {receiptStats.notConfirmed}
-              </Text>
-              <Text style={styles.receiptLbl}>Not Confirmed</Text>
+              <Text style={styles.receiptLbl}>Safe</Text>
             </View>
             <View style={styles.receiptDivider} />
             <View style={styles.receiptItem}>
@@ -140,6 +141,13 @@ export default function DashboardScreen() {
               </Text>
               <Text style={styles.receiptLbl}>Pending</Text>
             </View>
+            <View style={styles.receiptDivider} />
+            <View style={styles.receiptItem}>
+              <Text style={[styles.receiptNum, { color: Colors.light.danger }]}>
+                {receiptStats.needHelp}
+              </Text>
+              <Text style={styles.receiptLbl}>Need Help</Text>
+            </View>
           </View>
           {receiptStats.total > 0 ? (
             <View style={styles.progressWrap}>
@@ -147,14 +155,25 @@ export default function DashboardScreen() {
                 <View
                   style={[
                     styles.progressFill,
+                    { backgroundColor: Colors.light.success },
                     {
-                      width: `${Math.round((receiptStats.confirmed / receiptStats.total) * 100)}%`,
+                      width: `${Math.round((receiptStats.safe / receiptStats.total) * 100)}%`,
                     },
                   ]}
                 />
+                {receiptStats.needHelp > 0 ? (
+                  <View
+                    style={[
+                      styles.progressFillDanger,
+                      {
+                        width: `${Math.round((receiptStats.needHelp / receiptStats.total) * 100)}%`,
+                      },
+                    ]}
+                  />
+                ) : null}
               </View>
               <Text style={styles.progressText}>
-                {Math.round((receiptStats.confirmed / receiptStats.total) * 100)}% confirmed
+                {receiptStats.safe} safe, {receiptStats.needHelp} need help, {receiptStats.pending} pending
               </Text>
             </View>
           ) : null}
@@ -354,6 +373,11 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.light.success,
+  },
+  progressFillDanger: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.light.danger,
   },
   progressText: {
     fontSize: 11,

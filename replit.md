@@ -1,8 +1,8 @@
-# Emergency Alert System - Phase 1 + Phase 2 Complete
+# Emergency Alert System - Phase 1 + Phase 2 + Need Help Support
 
 ## Overview
 
-Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, wind/hazard overlays, People monitoring tab, Dashboard operations view, Users operations monitor. Stability is the top priority.
+Emergency alert system mobile app built with Expo/React Native frontend and Express/PostgreSQL backend. Phase 1 implements authentication, role-based access, safe map rendering, zone/location management, and basic alert operations. Phase 2: Shelter In/Blackout emergency modes, ECO+Admin alert monitor map, receipt confirmation system, alarm sound, wind/hazard overlays, Users operations monitor, Dashboard operations view. Phase 3: Real need_help/safe response status separate from receipt confirmation, personnel markers on Zone Map with status colors, unified EmergencyProvider context. Stability is the top priority.
 
 ## Stack
 

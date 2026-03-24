@@ -139,6 +139,107 @@ function ReceiptConfirmation({ emergencyModeId }: { emergencyModeId: string }) {
   );
 }
 
+function StatusResponse({ emergencyModeId }: { emergencyModeId: string }) {
+  const { data: myReceipt, isLoading } = useQuery<EmergencyReceipt | null>({
+    queryKey: ["/api/emergency", emergencyModeId, "receipt", "me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    refetchInterval: 10000,
+  });
+
+  const currentStatus = myReceipt?.responseStatus || null;
+
+  const responseMutation = useMutation({
+    mutationFn: async (status: "safe" | "need_help") => {
+      const res = await apiRequest("POST", `/api/emergency/${emergencyModeId}/response`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/emergency", emergencyModeId, "receipt", "me"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/emergency", emergencyModeId, "receipts", "summary"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+    },
+    onError: () => {
+      const msg = "Failed to update status. Please try again.";
+      if (Platform.OS === "web") {
+        alert(msg);
+      } else {
+        RNAlert.alert("Error", msg);
+      }
+    },
+  });
+
+  if (isLoading) {
+    return null;
+  }
+
+  return (
+    <View style={styles.statusResponseSection}>
+      <Text style={styles.statusResponseLabel}>Your Status</Text>
+      <View style={styles.statusResponseRow}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.statusButton,
+            { borderColor: Colors.light.success },
+            currentStatus === "safe" && { backgroundColor: Colors.light.success },
+            pressed && { opacity: 0.85 },
+            responseMutation.isPending && { opacity: 0.5 },
+          ]}
+          onPress={() => responseMutation.mutate("safe")}
+          disabled={responseMutation.isPending}
+        >
+          <Feather
+            name="check-circle"
+            size={16}
+            color={currentStatus === "safe" ? "#fff" : Colors.light.success}
+          />
+          <Text
+            style={[
+              styles.statusButtonText,
+              { color: currentStatus === "safe" ? "#fff" : Colors.light.success },
+            ]}
+          >
+            I am Safe
+          </Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.statusButton,
+            { borderColor: Colors.light.danger },
+            currentStatus === "need_help" && { backgroundColor: Colors.light.danger },
+            pressed && { opacity: 0.85 },
+            responseMutation.isPending && { opacity: 0.5 },
+          ]}
+          onPress={() => responseMutation.mutate("need_help")}
+          disabled={responseMutation.isPending}
+        >
+          <Feather
+            name="alert-triangle"
+            size={16}
+            color={currentStatus === "need_help" ? "#fff" : Colors.light.danger}
+          />
+          <Text
+            style={[
+              styles.statusButtonText,
+              { color: currentStatus === "need_help" ? "#fff" : Colors.light.danger },
+            ]}
+          >
+            Need Help
+          </Text>
+        </Pressable>
+      </View>
+      {currentStatus ? (
+        <Text style={styles.statusResponseCurrent}>
+          Current: {currentStatus === "safe" ? "Safe" : "Need Help"}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function ReceiptSummaryView({ emergencyModeId }: { emergencyModeId: string }) {
   const [expanded, setExpanded] = React.useState(false);
 
@@ -368,6 +469,7 @@ export default function EmergencyPanel() {
         </View>
         <View style={styles.receiptSection}>
           <ReceiptConfirmation emergencyModeId={emergencyMode.id} />
+          <StatusResponse emergencyModeId={emergencyMode.id} />
           {canActivate ? (
             <ReceiptSummaryView emergencyModeId={emergencyMode.id} />
           ) : null}
@@ -637,5 +739,40 @@ const styles = StyleSheet.create({
   summaryUserTime: {
     fontSize: 12,
     color: Colors.light.textSecondary,
+  },
+  statusResponseSection: {
+    gap: 8,
+    paddingTop: 4,
+  },
+  statusResponseLabel: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.light.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
+  statusResponseRow: {
+    flexDirection: "row" as const,
+    gap: 10,
+  },
+  statusButton: {
+    flex: 1,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 2,
+    backgroundColor: "transparent",
+  },
+  statusButtonText: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+  },
+  statusResponseCurrent: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    textAlign: "center" as const,
   },
 });

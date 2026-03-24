@@ -27,6 +27,7 @@ interface PersonEntry {
   locationId: string | null;
   receiptStatus: "confirmed" | "not_confirmed" | null;
   confirmedAt: string | null;
+  responseStatus: "safe" | "need_help" | null;
 }
 
 interface ZoneRef {
@@ -81,13 +82,11 @@ const FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
 const PENDING_WINDOW_MS = 10 * 60 * 1000;
 
 function computeStatus(person: PersonEntry, emergencyActivatedAt: string | null): PersonnelStatus {
-  if (person.receiptStatus === "confirmed") return "safe";
-  if (person.receiptStatus === "not_confirmed") {
-    if (emergencyActivatedAt) {
-      const elapsed = Date.now() - new Date(emergencyActivatedAt).getTime();
-      if (elapsed < PENDING_WINDOW_MS) return "pending";
-    }
-    return "no_reply";
+  if (person.responseStatus === "need_help") return "need_help";
+  if (person.responseStatus === "safe") return "safe";
+  if (emergencyActivatedAt) {
+    const elapsed = Date.now() - new Date(emergencyActivatedAt).getTime();
+    if (elapsed < PENDING_WINDOW_MS) return "pending";
   }
   return "no_reply";
 }

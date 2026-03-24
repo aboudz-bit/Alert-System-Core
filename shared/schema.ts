@@ -106,6 +106,8 @@ export const insertAlertSchema = createInsertSchema(alerts).pick({
   zoneId: true,
 });
 
+export const responseStatusEnum = pgEnum("response_status", ["safe", "need_help"]);
+
 export const emergencyReceipts = pgTable("emergency_receipts", {
   id: varchar("id")
     .primaryKey()
@@ -117,6 +119,8 @@ export const emergencyReceipts = pgTable("emergency_receipts", {
     .notNull()
     .references(() => users.id),
   confirmedAt: timestamp("confirmed_at").notNull().defaultNow(),
+  responseStatus: responseStatusEnum("response_status"),
+  respondedAt: timestamp("responded_at"),
 }, (table) => [
   unique().on(table.emergencyModeId, table.userId),
 ]);
@@ -156,5 +160,10 @@ export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export type EmergencyMode = typeof emergencyModes.$inferSelect;
 export type EmergencyReceipt = typeof emergencyReceipts.$inferSelect;
 export type EmergencyModeType = "shelter_in" | "blackout";
+export type ResponseStatus = "safe" | "need_help";
 export type UserRole = "admin" | "eco" | "supervisor" | "user";
 export type WindCondition = typeof windConditions.$inferSelect;
+
+export const setResponseStatusSchema = z.object({
+  status: z.enum(["safe", "need_help"]),
+});

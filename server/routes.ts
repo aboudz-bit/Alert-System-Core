@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { pool } from "./db";
-import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema, updateUserAssignmentSchema } from "@shared/schema";
+import { loginSchema, insertZoneSchema, insertLocationSchema, insertAlertSchema, activateEmergencySchema, updateWindSchema, updateUserAssignmentSchema, setResponseStatusSchema } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
 const PgSession = connectPgSimple(session);
@@ -402,6 +402,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/emergency/:id/response", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.session.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const parsed = setResponseStatusSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid status. Must be 'safe' or 'need_help'." });
+      }
+      const activeEmergency = await storage.getActiveEmergencyMode();
+      if (!activeEmergency || activeEmergency.id !== req.params.id) {
+        return res.status(400).json({ message: "No active emergency with this ID." });
+      }
+      const receipt = await storage.setResponseStatus(req.params.id, userId, parsed.data.status);
+      return res.json(receipt);
+    } catch (error) {
+      console.error("Set response status error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/emergency/:id/receipt/me", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.session.userId;
@@ -430,18 +452,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const allUsers = await storage.getUsers();
       const receipts = await storage.getReceiptsByMode(req.params.id);
-      const confirmedIds = new Set(receipts.map((r) => r.userId));
+      const receiptMap = new Map(receipts.map((r) => [r.userId, r]));
       const confirmed = allUsers
-        .filter((u) => confirmedIds.has(u.id))
-        .map((u) => ({
-          id: u.id,
-          name: u.name,
-          username: u.username,
-          role: u.role,
-          confirmedAt: receipts.find((r) => r.userId === u.id)?.confirmedAt || null,
-        }));
+        .filter((u) => receiptMap.has(u.id))
+        .map((u) => {
+          const r = receiptMap.get(u.id);
+          return {
+            id: u.id,
+            name: u.name,
+            username: u.username,
+            role: u.role,
+            confirmedAt: r?.confirmedAt || null,
+            responseStatus: r?.responseStatus || null,
+            respondedAt: r?.respondedAt || null,
+          };
+        });
       const notConfirmed = allUsers
-        .filter((u) => !confirmedIds.has(u.id))
+        .filter((u) => !receiptMap.has(u.id))
         .map((u) => ({
           id: u.id,
           name: u.name,
@@ -544,25 +571,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allLocations = await storage.getLocations();
       const activeEmergency = await storage.getActiveEmergencyMode();
 
-      let receiptMap: Record<string, string> = {};
+      let receiptMap = new Map<string, { confirmedAt: string; responseStatus: string | null }>();
       if (activeEmergency) {
         const receipts = await storage.getReceiptsByMode(activeEmergency.id);
         for (const r of receipts) {
-          receiptMap[r.userId] = r.confirmedAt ? new Date(r.confirmedAt).toISOString() : "";
+          receiptMap.set(r.userId, {
+            confirmedAt: r.confirmedAt ? new Date(r.confirmedAt).toISOString() : "",
+            responseStatus: r.responseStatus || null,
+          });
         }
       }
 
-      const people = allUsers.map((u) => ({
-        id: u.id,
-        name: u.name,
-        username: u.username,
-        role: u.role,
-        badgeNumber: u.badgeNumber || null,
-        zoneId: u.zoneId || null,
-        locationId: u.locationId || null,
-        receiptStatus: activeEmergency ? (receiptMap[u.id] ? "confirmed" : "not_confirmed") : null,
-        confirmedAt: receiptMap[u.id] || null,
-      }));
+      const people = allUsers.map((u) => {
+        const receipt = receiptMap.get(u.id);
+        return {
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          role: u.role,
+          badgeNumber: u.badgeNumber || null,
+          zoneId: u.zoneId || null,
+          locationId: u.locationId || null,
+          receiptStatus: activeEmergency ? (receipt ? "confirmed" : "not_confirmed") : null,
+          confirmedAt: receipt?.confirmedAt || null,
+          responseStatus: receipt?.responseStatus || null,
+        };
+      });
 
       return res.json({
         people,
