@@ -2,8 +2,10 @@ import { fetch } from "expo/fetch";
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 /**
- * Gets the base URL for the Express API server (e.g., "http://localhost:3000")
- * @returns {string} The API base URL
+ * Gets the base URL for the Express API server.
+ * Strips any non-standard port from the domain since the Replit HTTPS proxy
+ * routes to the correct internal port via the standard HTTPS port (443).
+ * Mobile devices cannot reach internal ports like :5000 directly.
  */
 export function getApiUrl(): string {
   let host = process.env.EXPO_PUBLIC_DOMAIN;
@@ -12,7 +14,12 @@ export function getApiUrl(): string {
     throw new Error("EXPO_PUBLIC_DOMAIN is not set");
   }
 
-  let url = new URL(`https://${host}`);
+  // Strip port suffix (e.g. ":5000") — the Replit HTTPS proxy handles routing
+  // to the correct internal port. Direct port access only works inside the
+  // container, not from external mobile devices.
+  const hostWithoutPort = host.replace(/:\d+$/, "");
+
+  const url = new URL(`https://${hostWithoutPort}`);
 
   return url.href;
 }
@@ -20,7 +27,28 @@ export function getApiUrl(): string {
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+
+    // Detect HTML error pages (e.g. proxy 404) and return a clean message
+    // instead of dumping raw HTML into the UI.
+    if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+      throw new Error(
+        `${res.status}: Server not reachable. Check that the backend is running.`
+      );
+    }
+
+    // For JSON error responses, try to extract the message field
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.message) {
+        throw new Error(`${res.status}: ${parsed.message}`);
+      }
+    } catch {
+      // not JSON — fall through
+    }
+
+    // Truncate very long text responses
+    const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
+    throw new Error(`${res.status}: ${truncated}`);
   }
 }
 
